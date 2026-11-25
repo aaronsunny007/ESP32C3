@@ -5,7 +5,7 @@
 #include "config.h"
 #include "battery.h"
 #include "settings.h"
-#include "panda.h"
+#include "panda_anim.h"
 #include "ble_link.h"
 #if WIFI_MODE
 #include <WiFi.h>
@@ -205,11 +205,40 @@ static void drawNowPlaying(const AppState &st) {
   display.fillRect(2, 58, barW, 4, SSD1306_WHITE);
 }
 
+// ---------- idle animation ----------
+// The pictures and their timing live in flash (panda_anim.h, made by tools/gif_to_frames.py);
+// the only RAM used is the step number and when it started.
+static uint8_t pandaStep = 0;
+static unsigned long pandaStepAt = 0;
+static bool pandaResting = false;
+static bool pandaDirty = false;            // picture switched outside pandaAdvance(): redraw now
+
+void uiPandaRest(bool rest) {
+  if (rest == pandaResting) return;
+  pandaResting = rest;
+  pandaStep = rest ? PANDA_ANIM_REST : 0;   // dozing picture while dim; start over when woken
+  pandaStepAt = millis();
+  pandaDirty = true;
+}
+
+// Moves to the next step when its time is up. True when the picture changed.
+static bool pandaAdvance() {
+  if (pandaResting || PANDA_ANIM_STEPS < 2) return false;
+  unsigned long now = millis();
+  uint16_t ms = pgm_read_word(&PANDA_ANIM_SEQ[pandaStep].ms);
+  if (now - pandaStepAt < ms) return false;
+  // Catch up if a long frame (or the info screen) kept us away, without replaying every step.
+  pandaStepAt = (now - pandaStepAt > 2000UL) ? now : pandaStepAt + ms;
+  uint8_t before = pgm_read_byte(&PANDA_ANIM_SEQ[pandaStep].frame);
+  pandaStep = (pandaStep + 1) % PANDA_ANIM_STEPS;
+  return pgm_read_byte(&PANDA_ANIM_SEQ[pandaStep].frame) != before;
+}
+
 static void drawPanda(const AppState &st) {
-  // Blink for 150 ms every 4 s.
-  bool blink = (millis() % 4000) < 150;
-  display.drawBitmap(0, 0, blink ? PANDA_BLINK : PANDA_OPEN, PANDA_W, PANDA_H, SSD1306_WHITE);
-  int x = PANDA_W + 4;
+  uint8_t frame = pgm_read_byte(&PANDA_ANIM_SEQ[pandaStep].frame);
+  display.drawBitmap(0, (SCREEN_HEIGHT - PANDA_ANIM_H) / 2,
+                     PANDA_ANIM_FRAMES_DATA[frame], PANDA_ANIM_W, PANDA_ANIM_H, SSD1306_WHITE);
+  int x = PANDA_ANIM_W + 4;   // text to the right of the animation
   if (!st.bleConnected && !st.spotifyDirect) {
     display.setCursor(x, 6);  display.print("Phone not");
     display.setCursor(x, 16); display.print("connected");
@@ -264,9 +293,21 @@ static void drawInfo(const AppState &st) {
 }
 
 void uiRender(Screen screen, const AppState &st, bool force) {
-  // Moving screens get ~40 fps, static ones 4 fps to save power.
-  unsigned long interval = (screen == SCR_NOW_PLAYING || screen == SCR_OTA) ? FRAME_MS : 250;
-  if (!force && millis() - lastFrame < interval) return;
+  // Moving screens get ~40 fps, static ones 4 fps to save power. The idle panda is only
+  // redrawn when its picture changes (a few times a second at most) or once a second for
+  // the battery / status text; while dimmed it stays on one picture.
+  bool due;
+  if (screen == SCR_PANDA) {
+    bool newPicture = pandaAdvance() || pandaDirty;
+    pandaDirty = false;
+    bool hasToast = st.toast[0] && (long)(millis() - st.toastUntil) < 300;   // show and clear it promptly
+    unsigned long refresh = hasToast ? 250UL : pandaResting ? 5000UL : 1000UL;
+    due = newPicture || millis() - lastFrame >= refresh;
+  } else {
+    unsigned long interval = (screen == SCR_NOW_PLAYING || screen == SCR_OTA) ? FRAME_MS : 250;
+    due = millis() - lastFrame >= interval;
+  }
+  if (!force && !due) return;
   lastFrame = millis();
 
   display.clearDisplay();

@@ -198,6 +198,7 @@ void loop() {
   // Dim the idle panda after a few seconds; anything else is shown at full brightness.
   bool dim = screen == SCR_PANDA && settings.dimAfterSec > 0 && now - idleScreenSince > settings.dimAfterSec * 1000UL;
   uiSetContrast(dim ? DIM_BRIGHTNESS : settings.brightness);
+  uiPandaRest(dim);   // dimmed: stop animating (no redraws) until something happens
   uiRender(screen, st, changed);
 
   // Even asleep the board draws a little, so a flat clip left on keeps draining the
