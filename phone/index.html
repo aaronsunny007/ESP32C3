@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bag Clip setup</title>
+<!--
+  Phone page for the bag clip, over Bluetooth (Web Bluetooth).
+  Works in Chrome on Android, and Chrome / Edge on a laptop. On iPhone use the
+  free "Bluefy" browser, or the nRF Connect app (see PROJECT.md).
+  Web Bluetooth needs https:// or localhost, so open it from GitHub Pages
+  (Settings > Pages > deploy from branch, folder /phone) or any https host.
+-->
+<style>
+  :root { --bg:#111; --card:#1c1c1c; --fg:#eee; --muted:#999; --accent:#1db954; --bad:#c44; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.4 system-ui, sans-serif; }
+  main { max-width:480px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.4em; margin:0 0 12px; }
+  section { background:var(--card); border-radius:12px; padding:12px 14px; margin:12px 0; }
+  h2 { font-size:1em; margin:0 0 8px; color:var(--muted); font-weight:600; }
+  button { font:inherit; padding:8px 14px; border:0; border-radius:8px; background:var(--accent); color:#000; }
+  button.secondary { background:#333; color:var(--fg); }
+  button.bad { background:var(--bad); color:#fff; padding:4px 10px; }
+  button:disabled { opacity:.4; }
+  label { display:block; margin:10px 0 4px; }
+  input[type=range] { width:100%; }
+  input[type=text], input[type=password], input[type=number] { width:100%; box-sizing:border-box; padding:8px;
+    border-radius:8px; border:1px solid #444; background:#000; color:var(--fg); font:inherit; }
+  .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
+  .controls { display:flex; gap:8px; justify-content:center; }
+  .controls button { font-size:1.3em; min-width:64px; }
+  .muted { color:var(--muted); font-size:.9em; }
+  ul { list-style:none; padding:0; margin:0; }
+  li { padding:6px 0; border-bottom:1px solid #2a2a2a; }
+  #log { color:var(--muted); font-size:.85em; min-height:1.2em; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Bag Clip</h1>
+  <div class="row">
+    <button id="connect">Connect</button>
+    <span id="conn" class="muted">Not connected</span>
+  </div>
+  <p id="log"></p>
+  <p class="muted" id="unsupported" hidden>This browser can't use Bluetooth. Use Chrome on Android or a laptop, or Bluefy on iPhone.</p>
+
+  <div id="ui" class="hidden">
+    <section>
+      <h2>Now playing</h2>
+      <div id="track">-</div>
+      <div class="muted" id="next"></div>
+      <div class="controls" style="margin-top:10px">
+        <button class="secondary" data-cmd="prev">&#9198;</button>
+        <button data-cmd="toggle">&#9199;</button>
+        <button class="secondary" data-cmd="next">&#9197;</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Clip</h2>
+      <div id="status" class="muted">-</div>
+    </section>
+
+    <section>
+      <h2>Wi-Fi networks</h2>
+      <ul id="nets"></ul>
+      <label for="ssid">Network name</label>
+      <input id="ssid" type="text" maxlength="32" autocomplete="off">
+      <label for="pass">Password</label>
+      <input id="pass" type="password" maxlength="64">
+      <p><button id="addNet">Save network</button></p>
+      <p class="muted">Saved on the clip (up to 5). It joins the strongest one in range, for example your phone's hotspot outside and home Wi-Fi at home.</p>
+    </section>
+
+    <section>
+      <h2>Settings</h2>
+      <label>Brightness <span id="brightnessV"></span></label>
+      <input id="brightness" type="range" min="1" max="255">
+      <label>Dim the idle panda after (seconds, 0 = never)</label>
+      <input id="dim" type="number" min="0" max="3600">
+      <label>Sleep when nothing plays for (minutes, 0 = never)</label>
+      <input id="sleep" type="number" min="0" max="240">
+      <label>Scroll speed <span id="scrollV"></span></label>
+      <input id="scroll" type="range" min="1" max="5">
+      <label><input id="art" type="checkbox"> Album art</label>
+      <p><button id="save">Save settings</button></p>
+    </section>
+  </div>
+</main>
+<script>
+const SVC      = 'b4c1a000-6f1a-4a8e-9c3e-2f5d7a0e1c00';
+const WIFI     = 'b4c1a001-6f1a-4a8e-9c3e-2f5d7a0e1c00';
+const SETTINGS = 'b4c1a002-6f1a-4a8e-9c3e-2f5d7a0e1c00';
+const CONTROL  = 'b4c1a003-6f1a-4a8e-9c3e-2f5d7a0e1c00';
+const STATUS   = 'b4c1a004-6f1a-4a8e-9c3e-2f5d7a0e1c00';
+
+const $ = id => document.getElementById(id);
+const enc = new TextEncoder(), dec = new TextDecoder();
+let chars = {}, device = null, busy = Promise.resolve();
+
+function log(msg) { $('log').textContent = msg; }
+
+// GATT allows one operation at a time; queue them.
+function gatt(fn) { busy = busy.then(fn, fn); return busy; }
+const readText  = c => gatt(async () => dec.decode(await chars[c].readValue()));
+const writeText = (c, s) => gatt(() => chars[c].writeValueWithResponse(enc.encode(s)));
+
+function parseKV(text, sep) {
+  const o = {};
+  for (const part of text.split(sep)) {
+    const i = part.indexOf('=');
+    if (i > 0) o[part.slice(0, i)] = part.slice(i + 1);
+  }
+  return o;
+}
+
+function showStatus(text) {
+  const s = parseKV(text, '\n');
+  $('track').textContent = s.title ? `${s.playing === '1' ? '▶' : '❚❚'} ${s.title} · ${s.artist}` : 'Nothing playing';
+  $('next').textContent = s.next ? `Next: ${s.next}` : '';
+  const bat = s.usb === '1' ? 'USB power' : (s.bat === '-1' ? 'no battery sensor' : `${s.bat}% (${(s.mv / 1000).toFixed(2)} V)`);
+  const wifi = s.wifi === 'connected' ? `${s.ssid} (${s.ip}, http://bagclip.local)` : s.wifi;
+  $('status').innerHTML = '';
+  for (const line of [`Battery: ${bat}`, `Wi-Fi: ${wifi}`, `Spotify: ${s.spotify}`, `Firmware: ${s.fw}`]) {
+    const d = document.createElement('div'); d.textContent = line; $('status').appendChild(d);
+  }
+}
+
+function showNets(text) {
+  const ul = $('nets'); ul.innerHTML = '';
+  const names = text ? text.split('\n').filter(Boolean) : [];
+  if (!names.length) { ul.innerHTML = '<li class="muted">No networks saved yet</li>'; return; }
+  for (const n of names) {
+    const li = document.createElement('li'); li.className = 'row';
+    const span = document.createElement('span'); span.textContent = n;
+    const b = document.createElement('button'); b.className = 'bad'; b.textContent = 'Remove';
+    b.onclick = async () => { await writeText('wifi', `del\n${n}`); showNets(await readText('wifi')); };
+    li.append(span, b); ul.appendChild(li);
+  }
+}
+
+function showSettings(text) {
+  const s = parseKV(text, ';');
+  for (const k of ['brightness', 'dim', 'sleep', 'scroll']) if (s[k] !== undefined) $(k).value = s[k];
+  $('art').checked = s.art === '1';
+  $('brightnessV').textContent = $('brightness').value;
+  $('scrollV').textContent = $('scroll').value;
+}
+
+async function connect() {
+  try {
+    log('Choose BagClip in the list...');
+    device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }, { namePrefix: 'BagClip' }], optionalServices: [SVC] });
+    device.addEventListener('gattserverdisconnected', () => { $('conn').textContent = 'Disconnected'; $('ui').classList.add('hidden'); });
+    log('Connecting...');
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SVC);
+    chars = {
+      wifi: await svc.getCharacteristic(WIFI), settings: await svc.getCharacteristic(SETTINGS),
+      control: await svc.getCharacteristic(CONTROL), status: await svc.getCharacteristic(STATUS),
+    };
+    // The first secure read makes the phone ask for the 6-digit PIN shown on the clip.
+    log('If asked, type the PIN shown on the clip.');
+    showStatus(await readText('status'));
+    showNets(await readText('wifi'));
+    showSettings(await readText('settings'));
+    await chars.status.startNotifications();
+    chars.status.addEventListener('characteristicvaluechanged', () => readText('status').then(showStatus));
+    $('conn').textContent = `Connected to ${device.name}`;
+    $('ui').classList.remove('hidden');
+    log('');
+  } catch (e) {
+    log(`Couldn't connect: ${e.message}`);
+  }
+}
+
+$('connect').onclick = connect;
+document.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => writeText('control', b.dataset.cmd).catch(e => log(e.message)));
+$('brightness').oninput = () => $('brightnessV').textContent = $('brightness').value;
+$('scroll').oninput = () => $('scrollV').textContent = $('scroll').value;
+
+$('addNet').onclick = async () => {
+  const ssid = $('ssid').value.trim(), pass = $('pass').value;
+  if (!ssid) return log('Type the network name first.');
+  if (pass && pass.length < 8) return log('Wi-Fi passwords are at least 8 characters.');
+  try {
+    await writeText('wifi', `add\n${ssid}\n${pass}`);
+    const list = await readText('wifi');
+    if (!list.split('\n').includes(ssid)) return log('The clip rejected that network.');
+    showNets(list); $('pass').value = ''; log(`Saved ${ssid}. The clip will join it if it's in range.`);
+  } catch (e) { log(e.message); }
+};
+
+$('save').onclick = async () => {
+  const kv = `brightness=${$('brightness').value};dim=${$('dim').value};sleep=${$('sleep').value};` +
+             `scroll=${$('scroll').value};art=${$('art').checked ? 1 : 0}`;
+  try {
+    await writeText('settings', kv);
+    const back = await readText('settings');
+    showSettings(back);
+    log(back === kv ? 'Settings saved.' : 'A value was out of range, nothing changed.');
+  } catch (e) { log(e.message); }
+};
+
+if (!navigator.bluetooth) { $('unsupported').hidden = false; $('connect').disabled = true; }
+</script>
+</body>
+</html>

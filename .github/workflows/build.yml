@@ -1,0 +1,38 @@
+# Compiles the firmware on every push and pull request, so build errors show up
+# on GitHub before you flash anything. Uses the placeholder secrets.example.h.
+name: Build firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core and libraries
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@3.1.1
+          arduino-cli lib install "Adafruit SSD1306" "Adafruit GFX Library" "ArduinoJson@7.2.1" "NimBLE-Arduino@2.1.0" "TJpg_Decoder@1.1.0"
+
+      - name: Compile
+        run: |
+          cp firmware/bag_clip/secrets.example.h firmware/bag_clip/secrets.h
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=min_spiffs \
+            --warnings default \
+            --output-dir build \
+            firmware/bag_clip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bag_clip-firmware
+          path: build/bag_clip.ino.bin
