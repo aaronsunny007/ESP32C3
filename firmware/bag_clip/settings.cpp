@@ -66,6 +66,10 @@ bool settingsApply(const String &kv) {
     if (eq < 0) { ok = false; continue; }
     String k = pair.substring(0, eq), v = pair.substring(eq + 1);
     k.trim(); v.trim();
+    // Only plain whole numbers: "" or "abc" would otherwise read as 0 (e.g. sleep=0 = never).
+    bool digits = v.length() > 0 && v.length() <= 5;
+    for (size_t i = 0; i < v.length(); i++) if (!isDigit(v[i])) digits = false;
+    if (!digits) { ok = false; continue; }
     long n = v.toInt();
     if (k == "brightness" && n >= 1 && n <= 255)      s.brightness = n;
     else if (k == "dim" && n >= 0 && n <= 3600)       s.dimAfterSec = n;

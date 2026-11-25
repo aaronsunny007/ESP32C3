@@ -39,19 +39,31 @@ static void markActivity() {
   idleScreenSince = millis();   // also undims the screen
 }
 
+// Deep sleep until the pad is tapped. If the pad is still pressed (a finger, or the bag
+// squashing it), a "wake when pressed" would fire at once and loop, so instead the clip
+// checks again every STUCK_PAD_RECHECK_S seconds until the pad is free.
+static void sleepNow() {
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  if (digitalRead(TOUCH_PIN) == HIGH) {
+    esp_sleep_enable_timer_wakeup(STUCK_PAD_RECHECK_S * 1000000ULL);
+  } else {
+    esp_deep_sleep_enable_gpio_wakeup(1ULL << TOUCH_PIN, ESP_GPIO_WAKEUP_GPIO_HIGH);
+  }
+  esp_deep_sleep_start();
+}
+
 static void enterDeepSleep(const char *line1, const char *line2) {
   uiSetContrast(settings.brightness);
   uiMessage(line1, line2);
-  delay(1200);
+  delay(strcmp(line1, "Battery low") == 0 ? 4000 : 1200);
   uiOff();
 
-  // If a finger is still on the pad, a HIGH-level wake would fire instantly.
+  // Give a finger on the pad a moment to lift.
   unsigned long t0 = millis();
   while (digitalRead(TOUCH_PIN) == HIGH && millis() - t0 < 3000) delay(10);
 
   wifiLinkOff();
-  esp_deep_sleep_enable_gpio_wakeup(1ULL << TOUCH_PIN, ESP_GPIO_WAKEUP_GPIO_HIGH);
-  esp_deep_sleep_start();
+  sleepNow();
 }
 
 // A play control from the touch pad, the phone page or the web page.
@@ -140,7 +152,10 @@ void setup() {
   setCpuFrequencyMhz(CPU_MHZ_BLE_ONLY);
 #endif
   Serial.begin(115200);
-  pinMode(TOUCH_PIN, INPUT);
+  pinMode(TOUCH_PIN, INPUT_PULLDOWN);   // reads "not touched" if the TTP223 isn't wired yet
+  // Woken by the timer = the pad was stuck down when we went to sleep. Check it again
+  // quietly (the screen stays off) and go back to sleep until someone really taps it.
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) sleepNow();
   bool wokeFromTouch = esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO;
   ignoreUntilRelease = digitalRead(TOUCH_PIN) == HIGH;
 
@@ -151,7 +166,7 @@ void setup() {
 
   batteryBegin();
   if (batteryPresent() && !batteryOnUsb() && batteryMv() < BATT_CRITICAL_MV) {
-    enterDeepSleep("Battery low", "Please charge me");
+    enterDeepSleep("Battery low", "Charge or switch off");
   }
 
   bleBegin();
@@ -185,7 +200,9 @@ void loop() {
   uiSetContrast(dim ? DIM_BRIGHTNESS : settings.brightness);
   uiRender(screen, st, changed);
 
-  if (batteryCritical()) enterDeepSleep("Battery low", "Please charge me");
+  // Even asleep the board draws a little, so a flat clip left on keeps draining the
+  // LiPo: the message asks for the switch to be turned off.
+  if (batteryCritical()) enterDeepSleep("Battery low", "Charge or switch off");
 
   // Sleep when nothing has played for a while, even with the phone connected: the app
   // reconnects by itself a second or two after a tap wakes the clip.

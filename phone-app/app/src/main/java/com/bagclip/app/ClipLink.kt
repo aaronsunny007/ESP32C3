@@ -134,6 +134,12 @@ object ClipLink {
         ready = false
         ops.clear()
         busy = false
+        // Forget half-sent updates too, or the next song would think it's "already queued"
+        // and never be sent. lastNow/lastArt are re-sent after reconnecting.
+        nowPending = null
+        artPending = null
+        main.removeCallbacks(watchdog)
+        main.removeCallbacks(mtuTimeout)
         try { gatt?.close() } catch (_: SecurityException) {}
         gatt = null
     }
@@ -199,6 +205,14 @@ object ClipLink {
     }
 
     private val watchdog = Runnable { Log.w(TAG, "operation timed out"); busy = false; drive() }
+
+    // If the phone never answers the MTU request, carry on with service discovery anyway
+    // instead of sitting on "Connecting…".
+    private val mtuTimeout = Runnable {
+        Log.w(TAG, "MTU request timed out")
+        busy = false
+        try { gatt?.discoverServices() } catch (_: SecurityException) {}
+    }
 
     private fun drive() {
         while (!busy && ops.isNotEmpty()) {
@@ -266,7 +280,8 @@ object ClipLink {
         enqueue {
             ready = true
             setState("Connected")
-            g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_LOW_POWER)
+            // No requestConnectionPriority here: the clip asks for its own slow, low-power
+            // connection after pairing, and a request from the phone would override it.
             lastNow?.let { sendNowPlaying(it) }
             lastArt?.let { sendArt(it) }
             onButton?.invoke("refresh")   // the listener sends a fresh update
@@ -281,8 +296,8 @@ object ClipLink {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
                     setState("Connecting…")
                     busy = true
-                    main.postDelayed(watchdog, 10_000)
-                    if (!g.requestMtu(247)) { busy = false; g.discoverServices() }
+                    main.postDelayed(mtuTimeout, 5_000)
+                    if (!g.requestMtu(247)) { main.removeCallbacks(mtuTimeout); busy = false; g.discoverServices() }
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     setState(if (address == null) "Not set up" else "Clip asleep or out of range")
                     reconnectSoon()
@@ -292,9 +307,10 @@ object ClipLink {
 
         override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
             main.post {
-                main.removeCallbacks(watchdog)
+                if (g != gatt) return@post
+                main.removeCallbacks(mtuTimeout)
                 busy = false
-                if (g == gatt) g.discoverServices()
+                g.discoverServices()
             }
         }
 

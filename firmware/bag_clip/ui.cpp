@@ -185,18 +185,22 @@ static void drawNowPlaying(const AppState &st) {
   drawStatusBar(st);   // drawn last so long text never covers it
 
   // Progress: interpolated between polls so the bar and clock tick every second.
+  // A length of 0 means the app doesn't know it (live streams, some podcasts): the
+  // clock still counts up, the total shows "--:--" and the bar stays empty.
+  bool knownLength = st.durationMs > 1;
   long shown = st.progressMs;
   if (st.playing) shown += (long)(millis() - st.progressStamp);
-  shown = constrain(shown, 0L, st.durationMs);
+  shown = knownLength ? constrain(shown, 0L, st.durationMs) : max(0L, shown);
   char el[10], tot[10];
   formatTime(shown, el, sizeof(el));
-  formatTime(st.durationMs, tot, sizeof(tot));
+  if (knownLength) formatTime(st.durationMs, tot, sizeof(tot));
+  else strlcpy(tot, "--:--", sizeof(tot));
   display.fillRect(0, 45, SCREEN_WIDTH, 19, SSD1306_BLACK);
   display.setCursor(0, 46);
   display.print(el);
   display.setCursor(SCREEN_WIDTH - strlen(tot) * 6, 46);
   display.print(tot);
-  int barW = (int)((int64_t)shown * (SCREEN_WIDTH - 4) / max(1L, st.durationMs));
+  int barW = knownLength ? (int)((int64_t)shown * (SCREEN_WIDTH - 4) / st.durationMs) : 0;
   display.drawRoundRect(0, 56, SCREEN_WIDTH, 8, 3, SSD1306_WHITE);
   display.fillRect(2, 58, barW, 4, SSD1306_WHITE);
 }
@@ -250,7 +254,7 @@ static void drawInfo(const AppState &st) {
   display.setCursor(0, 46);
   if (batteryPresent()) snprintf(line, sizeof(line), "Batt %d.%02d V %s", batteryMv() / 1000, (batteryMv() % 1000) / 10,
                                  batteryOnUsb() ? "USB" : "");
-  else snprintf(line, sizeof(line), "Batt: no divider");
+  else snprintf(line, sizeof(line), BATT_FITTED ? "Batt: no divider" : "Batt: off (config)");
   display.print(line);
 #if WIFI_MODE
   display.setCursor(0, 56);

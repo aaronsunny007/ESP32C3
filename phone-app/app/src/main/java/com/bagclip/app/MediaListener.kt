@@ -54,6 +54,7 @@ class MediaListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         connected = true
+        running = true
         ClipLink.init(applicationContext)
         ClipLink.onButton = ::onButton
         sessions = getSystemService(MediaSessionManager::class.java)
@@ -69,11 +70,15 @@ class MediaListener : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         connected = false
+        running = false
         handler.removeCallbacks(tick)
         try { sessions.removeOnActiveSessionsChangedListener(sessionsChanged) } catch (_: Exception) {}
         controller?.unregisterCallback(controllerCallback)
         controller = null
         ClipLink.onButton = null
+        // Android (or a phone maker's battery saver) unbound us. Ask to be brought back,
+        // otherwise songs stop reaching the clip until notification access is toggled.
+        NotificationListenerService.requestRebind(me())
     }
 
     private fun me() = ComponentName(this, MediaListener::class.java)
@@ -193,6 +198,17 @@ class MediaListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "MediaListener"
+
+        /** True while Android has the listener connected. */
+        @Volatile var running = false
+            private set
+
+        /** Ask Android to reconnect the listener if access is granted but it isn't running. */
+        fun rebindIfNeeded(c: android.content.Context) {
+            if (running || !Permissions.mediaAccessGranted(c)) return
+            Log.i(TAG, "listener not running, asking Android to rebind it")
+            NotificationListenerService.requestRebind(ComponentName(c, MediaListener::class.java))
+        }
         private val KNOWN_APPS = mapOf(
             "com.spotify.music" to "Spotify",
             "com.google.android.apps.youtube.music" to "YT Music",

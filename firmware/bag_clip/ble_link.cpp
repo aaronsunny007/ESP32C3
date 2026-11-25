@@ -8,7 +8,20 @@ static NimBLECharacteristic *statusChar = nullptr;
 static NimBLECharacteristic *buttonsChar = nullptr;
 static unsigned long lastStatus = 0;
 static String lastStatusText;
-static int connections = 0;   // the app and the phone page can be connected at once
+static int connections = 0;
+
+// Connections that haven't finished PIN pairing yet. Anything still unpaired after
+// UNPAIRED_KICK_MS is dropped, so a stray device can't sit on the clip and lock the phone out.
+struct PendingConn { uint16_t handle; unsigned long since; };
+static PendingConn pendingConns[4];
+static const unsigned long UNPAIRED_KICK_MS = 45000;   // time to type the PIN
+
+static void pendingAdd(uint16_t h) {
+  for (auto &p : pendingConns) if (p.since == 0) { p.handle = h; p.since = millis() | 1; return; }
+}
+static void pendingRemove(uint16_t h) {
+  for (auto &p : pendingConns) if (p.since && p.handle == h) p.since = 0;
+}
 
 static String charText(NimBLECharacteristic *c) {
   return String(c->getValue().c_str());
@@ -19,11 +32,19 @@ static void setText(NimBLECharacteristic *c, const String &s) {
 }
 
 class ServerCallbacks : public NimBLEServerCallbacks {
-  void onConnect(NimBLEServer *, NimBLEConnInfo &) override {
-    stateLock(); connections++; stateRef().bleConnected = true; stateUnlock();
-  }
-  void onDisconnect(NimBLEServer *, NimBLEConnInfo &, int) override {
+  void onConnect(NimBLEServer *, NimBLEConnInfo &info) override {
     stateLock();
+    connections++;
+    stateRef().bleConnected = true;
+    pendingAdd(info.getConnHandle());
+    stateUnlock();
+    // Keep advertising until this connection has paired with the PIN, so a stray device
+    // that connects first can't hide the clip from your phone.
+    NimBLEDevice::startAdvertising();
+  }
+  void onDisconnect(NimBLEServer *, NimBLEConnInfo &info, int) override {
+    stateLock();
+    pendingRemove(info.getConnHandle());
     AppState &s = stateRef();
     s.blePasskey = 0;
     connections = max(0, connections - 1);
@@ -35,7 +56,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
       s.playing = false;
     }
     stateUnlock();
-    // advertising restarts automatically
+    NimBLEDevice::startAdvertising();
   }
   // The phone asks for a PIN: show a fresh random one on the OLED.
   uint32_t onPassKeyDisplay() override {
@@ -46,11 +67,16 @@ class ServerCallbacks : public NimBLEServerCallbacks {
   void onAuthenticationComplete(NimBLEConnInfo &info) override {
     stateLock(); stateRef().blePasskey = 0; stateUnlock();
     NimBLEServer *server = NimBLEDevice::getServer();
-    if (!info.isEncrypted()) {
+    // Only accept a link that was paired with the PIN ("authenticated"). Plain encryption
+    // isn't enough: a device with no keyboard can pair without the PIN ("Just Works").
+    if (!info.isEncrypted() || !info.isAuthenticated()) {
+      Serial.println("[ble] pairing without the PIN refused");
       server->disconnect(info.getConnHandle());
       return;
     }
-    // Paired and encrypted: switch to a slow, low-power connection.
+    stateLock(); pendingRemove(info.getConnHandle()); stateUnlock();
+    NimBLEDevice::stopAdvertising();   // the phone is in; saves power
+    // Paired with the PIN: switch to a slow, low-power connection.
     server->updateConnParams(info.getConnHandle(), BLE_CONN_MIN_INTERVAL, BLE_CONN_MAX_INTERVAL,
                              BLE_CONN_LATENCY, BLE_CONN_TIMEOUT);
   }
@@ -125,7 +151,7 @@ class NowPlayingCallbacks : public NimBLECharacteristicCallbacks {
       if (k == "title")       { title = val; haveTitle = true; }
       else if (k == "artist") { artist = val; haveArtist = true; }
       else if (k == "next")   toDisplayable(val.c_str(), s.nextTitle, sizeof(s.nextTitle));
-      else if (k == "dur")    s.durationMs = max(1L, val.toInt());
+      else if (k == "dur")    s.durationMs = max(0L, val.toInt());   // 0 = unknown length
       else if (k == "pos")    { s.progressMs = max(0L, val.toInt()); s.progressStamp = millis(); }
       else if (k == "play")   s.playing = val.toInt() == 1;
       else if (k == "app")    toDisplayable(val.c_str(), s.sourceApp, sizeof(s.sourceApp));
@@ -140,7 +166,8 @@ class NowPlayingCallbacks : public NimBLECharacteristicCallbacks {
         strlcpy(s.title, t, sizeof(s.title));
         strlcpy(s.artist, a, sizeof(s.artist));
         s.trackVersion++;
-        s.artValid = false;   // the app sends the new cover straight after
+        // Keep the art: the app sends the cover for every new song (an empty one if the
+        // song has none), and it can arrive just before or just after the title.
       }
       s.hasTrack = true;
     }
@@ -166,7 +193,8 @@ class ArtCallbacks : public NimBLECharacteristicCallbacks {
 };
 
 class ButtonsCallbacks : public NimBLECharacteristicCallbacks {
-  void onSubscribe(NimBLECharacteristic *, NimBLEConnInfo &, uint16_t subValue) override {
+  void onSubscribe(NimBLECharacteristic *, NimBLEConnInfo &info, uint16_t subValue) override {
+    if (subValue && !info.isAuthenticated()) return;   // only a PIN-paired phone counts
     stateLock(); stateRef().appLinked = subValue != 0; stateUnlock();
     Serial.printf("[ble] app %s\n", subValue ? "linked" : "unlinked");
   }
@@ -211,19 +239,21 @@ void bleBegin() {
 
   const uint32_t secureW = NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN;
   const uint32_t secureRW = secureW | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN;
-#if WIFI_MODE
-  svc->createCharacteristic(BLE_WIFI_UUID, secureRW, 256)->setCallbacks(new WifiCallbacks());
-#endif
+  // Order matters: Android remembers the layout of a paired clip, so new characteristics
+  // always go at the END (the Wi-Fi one last), or switching builds would shift the others.
+  const uint32_t secureRN = NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN |
+                            NIMBLE_PROPERTY::NOTIFY;
   svc->createCharacteristic(BLE_SETTINGS_UUID, secureRW, 128)->setCallbacks(new SettingsCallbacks());
   svc->createCharacteristic(BLE_CONTROL_UUID, secureW, 16)->setCallbacks(new ControlCallbacks());
-  statusChar = svc->createCharacteristic(
-      BLE_STATUS_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::NOTIFY, 512);
+  statusChar = svc->createCharacteristic(BLE_STATUS_UUID, secureRN, 512);
   setText(statusChar, statusText());
   svc->createCharacteristic(BLE_NOW_UUID, secureW, 512)->setCallbacks(new NowPlayingCallbacks());
   svc->createCharacteristic(BLE_ART_UUID, secureW, ART_SIZE * ART_SIZE / 8)->setCallbacks(new ArtCallbacks());
-  buttonsChar = svc->createCharacteristic(
-      BLE_BUTTONS_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::NOTIFY, 16);
+  buttonsChar = svc->createCharacteristic(BLE_BUTTONS_UUID, secureRN, 16);
   buttonsChar->setCallbacks(new ButtonsCallbacks());
+#if WIFI_MODE
+  svc->createCharacteristic(BLE_WIFI_UUID, secureRW, 256)->setCallbacks(new WifiCallbacks());
+#endif
   svc->start();
 
   NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
@@ -246,7 +276,24 @@ bool bleSendToPhone(Command c) {
   return buttonsChar->notify();
 }
 
+// Drop connections that never paired with the PIN.
+static void kickUnpaired() {
+  uint16_t kick[4];
+  int n = 0;
+  stateLock();
+  for (auto &p : pendingConns) {
+    if (p.since && millis() - p.since > UNPAIRED_KICK_MS) { kick[n++] = p.handle; p.since = 0; }
+  }
+  stateUnlock();
+  NimBLEServer *server = NimBLEDevice::getServer();
+  for (int i = 0; i < n; i++) {
+    Serial.println("[ble] dropping a connection that never paired");
+    server->disconnect(kick[i]);
+  }
+}
+
 void bleUpdate() {
+  kickUnpaired();
   if (!statusChar || millis() - lastStatus < 2000) return;
   lastStatus = millis();
   String s = statusText();

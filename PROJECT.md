@@ -139,7 +139,7 @@ The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) and the Wi
 | GPIO 9 | SCL | — | I2C clock |
 | GPIO 3 | — | I/O (SIG) | Touch input + deep-sleep wake (must be GPIO 0–5) |
 
-Without the battery divider the clip simply hides the battery icon.
+For this bench test leave `BATT_FITTED 0` in `config.h` (the default): with no battery resistors fitted the clip hides the battery icon instead of reading the empty pin as a flat battery.
 
 ### Step B: battery and charging (8 solder joints)
 
@@ -175,8 +175,13 @@ A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-
 
 - Taking it after the switch means the divider draws nothing when the clip is switched off. While on, it draws ~20 µA, which is small next to the clip itself.
 - With USB plugged into the ESP32 (switch off) the 5V pin sits at ~4.7 V, so the screen shows **USB** and a lightning bolt instead of a percentage.
+- **Switch the reading on:** set `BATT_FITTED 1` in `config.h` and flash again. Until then the clip ignores GPIO 4 (no battery icon, no low-battery shutdown).
 - **Calibrate once:** hold the touch pad for 1.5 s to open the info screen, compare "Batt x.xx V" with a multimeter on the battery, and set `BATT_CAL` in `config.h` to *real ÷ shown* (e.g. 4.02 / 3.95 = 1.018).
-- Below ~3.45 V the board's regulator starts to brown out, so the clip shows "Battery low" and sleeps until charged.
+- Below ~3.45 V the board's regulator starts to brown out, so the clip shows "Battery low / Charge or switch off" and sleeps. **Switch it off** (or charge it): even asleep the board keeps drawing a little, and a flat LiPo left on keeps draining.
+
+### Step B3: remove the power LED (recommended)
+
+The SuperMini's red power LED is on whenever the board has power, **including deep sleep**, and draws about 1 mA. That's more than the rest of the sleeping clip and empties a 500 mAh battery in about two weeks of "sleep". Remove it: hold the iron on the LED (or its tiny resistor next to it) for a second and flick it off, or cut its resistor with a craft knife. The blue LED on GPIO 8 is separate and only flickers with OLED traffic. After this, measure the current with a multimeter in series with the switch: asleep it should be well under 1 mA. For storage, always slide the switch off.
 - Using different resistors: set `BATT_DIVIDER` in `config.h` to (R1 + R2) ÷ R2. Keep the pin voltage under 2.5 V.
 
 ### Step C: sandwich stack
@@ -213,7 +218,7 @@ The default Bluetooth-only build needs **no `secrets.h`**, no Spotify keys and n
 3. **Open Bag Clip** and do the three steps on its screen:
    1. **Allow Bluetooth** (Android asks for "Nearby devices").
    2. **Allow reading what's playing**: switch on *Bag Clip* in the *Notification access* list. Android calls it that because media info comes through the same door; the app ignores your notifications' content. **Android 13+:** for apps installed from a file this switch is greyed out at first. Go to *Settings → Apps → Bag Clip → ⋮ (top right) → Allow restricted settings*, then switch it on.
-   3. **Find my clip**: tap the clip to wake it, tap the button, and type the **6-digit PIN** the clip shows when your phone asks.
+   3. **Find my clip**: tap the clip to wake it, tap the button, and type the **6-digit PIN** the clip shows when your phone asks. (Android 8–11: switch **Location** on in quick settings while searching; those versions only find Bluetooth devices with Location on.)
 4. Optional but recommended: **Let it run in the background** → set Bag Clip to *Unrestricted*. Xiaomi/Redmi/POCO, Oppo/Realme, Vivo and some Samsung phones kill background apps aggressively; on Xiaomi also enable *Autostart*.
 5. Play a song in any app. Title, artist, album art and progress appear on the clip within a second or so.
 
@@ -221,15 +226,15 @@ The app keeps running in the background on its own (Android keeps apps with noti
 
 ### Bluetooth protocol (for nRF Connect or your own app)
 
-Service `b4c1a000-6f1a-4a8e-9c3e-2f5d7a0e1c00`. All characteristics need the PIN pairing first. Text is UTF-8.
+Service `b4c1a000-6f1a-4a8e-9c3e-2f5d7a0e1c00`. All characteristics need the PIN pairing first (plain "Just Works" pairing is refused), and a connection that hasn't paired within 45 s is dropped. Text is UTF-8.
 
 | Characteristic | Direction | Format |
 |---|---|---|
 | `b4c1a002…` Settings | read / write | `brightness=200;dim=8;sleep=5;scroll=3;art=1` (any subset) |
 | `b4c1a003…` Control | phone → clip | `toggle`, `play`, `pause`, `next`, `prev`, `refresh` (the clip passes them on to the app) |
 | `b4c1a004…` Status | read / notify | `fw=`, `mode=`, `bat=`, `mv=`, `usb=`, `app=`, `playing=`, `title=` … lines |
-| `b4c1a005…` Now playing | phone → clip | newline-separated `key=value`, any subset: `title`, `artist`, `next`, `dur` (ms), `pos` (ms), `play` (1/0), `app`, `pbat` (%), or `clear=1` for nothing playing. Up to 512 bytes |
-| `b4c1a006…` Album art | phone → clip | exactly 128 bytes: 32×32, 1 bit per pixel, rows top to bottom, MSB = leftmost, 1 = lit. Any other length clears the art |
+| `b4c1a005…` Now playing | phone → clip | newline-separated `key=value`, any subset: `title`, `artist`, `next`, `dur` (ms, 0 = unknown length), `pos` (ms), `play` (1/0), `app`, `pbat` (%), or `clear=1` for nothing playing. Up to 512 bytes |
+| `b4c1a006…` Album art | phone → clip | exactly 128 bytes: 32×32, 1 bit per pixel, rows top to bottom, MSB = leftmost, 1 = lit. An empty write (0 bytes) clears the art; longer writes are rejected |
 | `b4c1a007…` Buttons | clip → phone (notify) | `toggle`, `next`, `prev`, `refresh` when the pad is tapped. Subscribing marks the app as linked |
 | `b4c1a001…` Wi-Fi | read / write | Wi-Fi mode only: `add` ⏎ `SSID` ⏎ `password`, or `del` ⏎ `SSID` |
 
@@ -286,10 +291,10 @@ Paste each array over the one in `panda.h` (keep the `PANDA_W` / `PANDA_H` lines
 ## Pre-flight checklist (do in order, before closing the case)
 
 - [ ] **1. USB & board:** plug in, select ESP32C3 Dev Module + USB CDC On Boot Enabled + Minimal SPIFFS partition, upload a blink/serial test. COM port shows up, upload clean.
-- [ ] **2. OLED & touch:** jumper-wire OLED + TTP223, flash `bag_clip`. OLED shows "Bag Clip v3.0.0" then "Set me up!"; TTP223 LED lights when touched; holding it 1.5 s shows the info screen.
+- [ ] **2. OLED & touch:** jumper-wire OLED + TTP223, flash `bag_clip` (with `BATT_FITTED 0`, the default). OLED shows "Bag Clip v3.0.1" then "Set me up!"; TTP223 LED lights when touched; holding it 1.5 s shows the info screen.
 - [ ] **3. App + Bluetooth:** install the app, do its three steps (PIN on the OLED), play a song in Spotify. Title, artist, album art and times within ~1 s; long titles scroll smoothly. Turn the phone screen off: the clip keeps updating. Hotspot and Wi-Fi can stay off.
 - [ ] **4. Touch, dim & sleep:** 1 tap pauses/plays, 2 taps skip, 3 taps go back (on the phone, within ~0.5 s). Pause: panda after 10 s, dims after 8 s more, sleeps after 5 min. Tap → wakes, and the app reconnects within a few seconds.
-- [ ] **5. Battery:** USB unplugged, solder LiPo + TP4056 + switch + the two resistors, switch ON. Nothing warm, boots on battery, battery % shows; calibrate `BATT_CAL` against a multimeter. TP4056 LED red while charging / blue when full.
+- [ ] **5. Battery:** USB unplugged, solder LiPo + TP4056 + switch + the two resistors, remove the power LED (Step B3), set `BATT_FITTED 1` and flash, switch ON. Nothing warm, boots on battery, battery % shows; calibrate `BATT_CAL` against a multimeter. TP4056 LED red while charging / blue when full.
 
 ## Build check
 
@@ -306,15 +311,16 @@ A green check means it compiles; it doesn't test behaviour on real hardware or a
 - **Progress bar** is interpolated on the clip between updates; the app re-syncs the position on every play/pause/seek and every 30 s.
 - **Album art** is dithered on the phone (same Floyd–Steinberg + contrast stretch as v2's on-clip decoder), so the clip just copies 128 bytes.
 - **Text:** the app strips accents ("Beyoncé" → "Beyonce") and turns other non-ASCII characters into `?`, since the OLED font is ASCII only.
-- **Low power:** 80 MHz CPU, slow BLE connection parameters after pairing, slower advertising (every 250–500 ms) while waiting for the phone, deep sleep after the sleep time even while connected.
-- **Pairing:** LE Secure Connections with a random 6-digit PIN on the OLED; unencrypted connections are dropped. Nobody nearby can see what you play or skip your songs.
+- **Low power:** 80 MHz CPU, slow BLE connection parameters after pairing, slower advertising (every 250–500 ms) while waiting for the phone, deep sleep after the sleep time even while connected. The app doesn't request its own connection speed, so the clip's slow setting stays in force.
+- **Pairing:** LE Secure Connections with a random 6-digit PIN on the OLED. Every characteristic needs a PIN-paired link; pairing without the PIN is refused, and a connection that hasn't paired within 45 s is dropped (the clip keeps advertising until your phone is paired, so a stray device can't lock it out). Nobody nearby can see what you play or skip your songs.
+- **Stuck pad:** if the pad is still pressed when the clip goes to sleep (squashed in the bag), it checks again every minute with the screen off instead of waking over and over.
 - Carried over from v2: smooth time-based scrolling, tap queue, battery gauge and calibration, panda idle screen, settings in flash, sleep/wake on the touch pad, low-battery shutdown.
 
 ## Known risks / open questions
 
 - **Not tested on hardware or a phone yet.** Library APIs (NimBLE-Arduino 2.x, ESP32 core 3.x) are pinned in the build check; older versions (NimBLE 1.x, core 2.x) won't compile.
 - **Android only** for the Bluetooth-only mode (see "iPhone" above).
-- **Background killing:** some Android skins stop background apps despite notification access. If the clip stops updating with the phone screen off, set the app's battery use to *Unrestricted* (and *Autostart* on Xiaomi).
+- **Background killing:** some Android skins stop background apps despite notification access. If the clip stops updating with the phone screen off, set the app's battery use to *Unrestricted* (and *Autostart* on Xiaomi). If Android does unbind the app's listener, it asks to be reconnected straight away, and again whenever you open the app.
 - **Sideloaded app on Android 13+** needs *Allow restricted settings* before notification access can be switched on (see the app setup steps).
 - **Next up** only shows when the playing app shares its queue with Android. Many apps do; Spotify may or may not depending on version. Everything else works without it.
 - **Pairing a second phone / a new phone:** remove *BagClip* from the old phone's Bluetooth list and pair again from the new one. The clip keeps up to a few bonds.

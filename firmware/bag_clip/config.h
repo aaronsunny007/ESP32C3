@@ -2,7 +2,7 @@
 #pragma once
 #include <Arduino.h>
 
-#define FW_VERSION   "3.0.0"
+#define FW_VERSION   "3.0.1"
 #define DEVICE_NAME  "BagClip"     // Bluetooth name, and http://bagclip.local on Wi-Fi
 #define MDNS_NAME    "bagclip"
 
@@ -39,6 +39,10 @@
 #define OLED_ADDR     0x3C
 
 // ---------- Battery (see PROJECT.md "Battery level") ----------
+// 0 until the two 100k resistors (Step B2) are soldered on. Without them GPIO4 floats and
+// can read as a flat battery, so the clip would say "Battery low" and sleep on the bench.
+// Set to 1 at pre-flight stage 5, together with BATT_CAL.
+#define BATT_FITTED      0
 // 100k from battery+ to GPIO4, 100k from GPIO4 to GND  ->  ratio (100k+100k)/100k = 2.
 #define BATT_DIVIDER     2.0f
 // Multiply the reading by this after comparing with a multimeter (e.g. 4.02 V real / 3.95 V shown = 1.018).
@@ -57,6 +61,7 @@
 #define PAUSED_TO_PANDA_MS 10000UL // show the paused track this long, then the panda
 #define FRAME_MS             25UL  // ~40 fps cap; one full I2C frame takes ~23 ms at 400 kHz
 #define MAX_POLL_FAILURES      5   // then treat as "not playing" so the sleep timer runs
+#define STUCK_PAD_RECHECK_S   60   // pad still pressed at sleep time: check again this often
 #define SETUP_SLEEP_MS (10UL * 60UL * 1000UL) // never paired (or no Wi-Fi saved in Wi-Fi mode): sleep after 10 min
 
 #define MAX_WIFI_NETWORKS 5

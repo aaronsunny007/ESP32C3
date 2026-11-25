@@ -10,6 +10,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Intent
 import android.graphics.Typeface
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -98,6 +99,7 @@ class MainActivity : Activity() {
         super.onResume()
         ClipLink.onChange = { handler.post { refresh() } }
         ClipLink.connect()
+        MediaListener.rebindIfNeeded(this)
         refresh()
     }
 
@@ -146,6 +148,14 @@ class MainActivity : Activity() {
         if (!Permissions.bluetoothGranted(this)) { requestPermissions(Permissions.bluetooth, 1); return }
         val adapter = (getSystemService(BLUETOOTH_SERVICE) as BluetoothManager).adapter
         if (adapter == null || !adapter.isEnabled) { status.text = "Turn Bluetooth on first."; return }
+        // Android 8-11 only finds Bluetooth devices while Location is switched on.
+        if (Build.VERSION.SDK_INT < 31) {
+            val lm = getSystemService(LOCATION_SERVICE) as android.location.LocationManager
+            val on = if (Build.VERSION.SDK_INT >= 28) lm.isLocationEnabled
+                     else lm.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+                          lm.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+            if (!on) { status.text = "Switch on Location (quick settings) so the phone can find the clip."; return }
+        }
         val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(ClipLink.SERVICE)).build()
         val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
         try {

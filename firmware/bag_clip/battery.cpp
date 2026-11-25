@@ -18,6 +18,7 @@ static int readOnceMv() {
 }
 
 void batteryBegin() {
+  if (!BATT_FITTED) return;   // no divider: nothing to read, the icon stays hidden
   pinMode(BATT_PIN, INPUT);
   analogSetPinAttenuation(BATT_PIN, ADC_11db);   // C3 measures up to ~2.5 V at the pin
   smoothedMv = readOnceMv();
@@ -25,7 +26,7 @@ void batteryBegin() {
 }
 
 void batteryUpdate() {
-  if (millis() - lastRead < BATT_READ_MS) return;
+  if (!BATT_FITTED || millis() - lastRead < BATT_READ_MS) return;
   lastRead = millis();
   int mv = readOnceMv();
   // Jumps (plugging USB in or out) are taken straight away, small noise is smoothed.
@@ -34,7 +35,7 @@ void batteryUpdate() {
 }
 
 int  batteryMv()      { return smoothedMv; }
-bool batteryPresent() { return smoothedMv >= BATT_MISSING_MV; }
+bool batteryPresent() { return BATT_FITTED && smoothedMv >= BATT_MISSING_MV; }
 bool batteryOnUsb()   { return smoothedMv >= BATT_USB_MV; }
 bool batteryCritical(){ return lowReadings >= 3; }   // 3 readings in a row, ~15 s
 
