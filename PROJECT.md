@@ -247,7 +247,7 @@ The default Bluetooth-only build needs **no `secrets.h`**, no Spotify keys and n
 
 Your phone: **Google Pixel** (stock Android 13+). No background-killer settings needed; do the *Allow restricted settings* step below.
 
-1. **Get the APK.** On GitHub open **Actions → Build firmware and app**, click the latest green run, and download **bag-clip-app** at the bottom (a zip with `app-debug.apk` inside). Or build it yourself: open `phone-app/` in Android Studio and press Run.
+1. **Get the APK.** On GitHub open **Actions → Build firmware and app**, click the latest green run, and download **bag-clip-app** at the bottom (a zip with `app-debug.apk` inside). On the phone: sign in to GitHub in Chrome first (artifact downloads need it), then **Files → Downloads → tap the zip → Extract**. Each build is kept for 90 days. Or build it yourself: open `phone-app/` in Android Studio and press Run.
 2. **Install it.** Copy the APK to the phone and open it. Android asks to allow installing from that app (Files / Chrome): allow it. Play Protect may warn that it's an unknown app; choose *Install anyway*. **Updating later:** every build is signed with the same key (`phone-app/app/bagclip-debug.keystore`), so a newer APK installs straight over the old one and keeps all the permissions below. No uninstall needed.
 3. **Open Bag Clip** and do the three steps on its screen:
    1. **Allow Bluetooth** (Android asks for "Nearby devices").
@@ -255,6 +255,8 @@ Your phone: **Google Pixel** (stock Android 13+). No background-killer settings 
    3. **Find my clip**: tap the clip to wake it, tap the button, and type the **6-digit PIN** the clip shows when your phone asks. (Android 8–11: switch **Location** on in quick settings while searching; those versions only find Bluetooth devices with Location on.)
 4. Optional but recommended: **Let it run in the background** → set Bag Clip to *Unrestricted*. Xiaomi/Redmi/POCO, Oppo/Realme, Vivo and some Samsung phones kill background apps aggressively; on Xiaomi also enable *Autostart*.
 5. Play a song in any app. Title, artist, album art and progress appear on the clip within a second or so.
+
+**Before the hardware arrives (one-hour test):** do steps 1–3.2 (skip *Find my clip*), play a song, check the app's screen shows it, lock the phone for an hour, then open the app again: it should still show the right song. That proves the phone half works.
 
 The app keeps running in the background on its own (Android keeps apps with notification access alive), reconnects whenever the clip wakes up, and follows whichever app is playing.
 
