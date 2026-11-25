@@ -6,7 +6,7 @@ Usage:
 
 Prints a C array named NAME (plus NAME_W / NAME_H) to stdout. Lit OLED pixels are the
 *bright* parts of the image, so draw your picture white-on-black (or pass --invert).
-Paste the output into firmware/bag_clip/panda.h in place of the panda arrays.
+For the animated idle screen use tools/gif_to_frames.py instead.
 
 Needs Pillow:  pip install pillow
 """

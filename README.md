@@ -1,6 +1,6 @@
 # ESP32-C3 Spotify "Now Playing" Bag Clip
 
-A wearable clip that shows the song playing on your phone on a 0.96" OLED, with black-and-white album art, what's next, elapsed/total time and a battery gauge. Tap once to play/pause, twice to skip, three times to go back. When nothing plays it shows a panda, dims, and then sleeps (tap to wake).
+A wearable clip that shows the song playing on your phone on a 0.96" OLED, with black-and-white album art, what's next, elapsed/total time and a battery gauge. Tap once to play/pause, twice to skip, three times to go back. When nothing plays it shows a small animated panda (or any GIF you convert with `tools/gif_to_frames.py`), dims, and then sleeps (tap to wake).
 
 **Bluetooth only:** the clip connects to your Android phone over Bluetooth Low Energy. No Wi-Fi, no phone hotspot, no Spotify keys. The Bag Clip app on the phone sends the song (from Spotify or any music app) and handles the play/skip taps. Wi-Fi (OTA updates, web page) is an optional build setting, off by default. iPhone can't run the companion app; see `PROJECT.md`.
 

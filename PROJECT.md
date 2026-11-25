@@ -1,6 +1,6 @@
 # ESP32-C3 Spotify "Now Playing" Bag Clip
 
-A wearable clip that shows the song playing on your phone on a small OLED screen, with album art, what's playing next and a battery gauge. Tap once to play/pause, twice to skip, three times to go back. When nothing is playing it shows a panda, dims, and then sleeps (tap to wake). Runs on a rechargeable LiPo.
+A wearable clip that shows the song playing on your phone on a small OLED screen, with album art, what's playing next and a battery gauge. Tap once to play/pause, twice to skip, three times to go back. When nothing is playing it shows a little animated panda (blinks, waves, eats bamboo, dozes off), dims, and then sleeps (tap to wake). Runs on a rechargeable LiPo.
 
 **Since v3 the clip talks to your phone over Bluetooth only.** No Wi-Fi, no phone hotspot, no Spotify developer keys. A small Android app (`phone-app/`) sends the song to the clip and plays/pauses/skips when you tap the clip. Wi-Fi is still in the firmware as an optional build setting, off by default.
 
@@ -13,6 +13,7 @@ Source of truth for the hardware: *Spotify Bag Clip Complete Guide v6* (in `docs
 | Project file + firmware v1 saved | Done (25 Nov 2026) |
 | Firmware v2 (Bluetooth setup, battery, panda, album art, queue, settings, OTA) | Written 25 Nov 2026, superseded by v3 |
 | Firmware v3: Bluetooth only + Android app (Wi-Fi optional, off) | Written 25 Nov 2026. Firmware and APK build on GitHub (see "Build check"), **not yet tested on hardware or a phone** |
+| Animated idle panda + GIF converter (`tools/gif_to_frames.py`) | Written 25 Nov 2026. Compile checked on GitHub, **not yet seen on a real OLED** |
 | Parts ordered (add 2 × 100 kΩ resistors) | To do |
 | Pre-flight stage 1: USB & board | To do |
 | Pre-flight stage 2: OLED & touch | To do |
@@ -74,13 +75,13 @@ esp32c3/
 ├── .github/workflows/build.yml ← builds the firmware (both modes) and the Android app on every push
 ├── docs/
 │   ├── Spotify_Bag_Clip_Complete_Guide_v6.pdf
-│   └── images/panda_preview.png
+│   └── images/panda_idle.gif, panda_idle_preview.gif, panda_poses.png
 ├── firmware/bag_clip/        ← the firmware (one Arduino sketch, several tabs)
 │   ├── bag_clip.ino          ← setup/loop, touch, sleep, sending taps to the phone
 │   ├── config.h              ← pins, timings, defaults, WIFI_MODE switch  (edit for hardware changes)
 │   ├── ble_link.cpp/.h       ← Bluetooth service: song in, taps out, settings, status
 │   ├── ui.cpp/.h             ← every screen, icons, scrolling
-│   ├── panda.h               ← idle-screen panda bitmaps (swap for your own)
+│   ├── panda_anim.h          ← idle-screen animation frames, generated (swap for your own GIF)
 │   ├── battery.cpp/.h        ← battery voltage and %
 │   ├── settings.cpp/.h       ← settings (and Wi-Fi list) stored in flash
 │   ├── state.cpp/.h          ← shared state between tasks
@@ -99,8 +100,9 @@ esp32c3/
 │       └── ArtDither.kt      ← cover → 32×32 black-and-white thumbnail
 ├── phone/index.html          ← optional settings page in the browser (Web Bluetooth)
 └── tools/
-    ├── png_to_bitmap.py      ← turn any picture into an OLED bitmap
-    └── draw_panda.py         ← how the default panda was drawn
+    ├── gif_to_frames.py      ← turn any GIF into panda_anim.h (the idle animation)
+    ├── png_to_bitmap.py      ← turn a still picture into an OLED bitmap
+    └── draw_panda.py         ← draws the default animated panda (docs/images/panda_idle.gif)
 ```
 
 The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) and the Wi-Fi-first v2 are in git history.
@@ -255,20 +257,41 @@ To read Spotify directly (no app connected), fill in `secrets.h`: create an app 
 
 Defaults live in `config.h`; changes from the app, the phone page or the web page are saved in flash.
 
-### Swapping the panda
+### The idle panda animation
 
-The idle screen draws `PANDA_OPEN` and, for a quick blink every 4 s, `PANDA_BLINK` from `firmware/bag_clip/panda.h` (64×64, 1 bit per pixel, lit pixels = white).
+When nothing is playing, the left half of the screen shows a 64×64 panda that loops through a ~16 s routine: looks around and blinks, waves, eats a stick of bamboo, then dozes off with floating z's. The text on the right ("Nothing playing", "Paused", ...) stays as before.
 
-![panda preview](docs/images/panda_preview.png)
+![panda animation, 4x size](docs/images/panda_idle_preview.gif)
 
-To use your own picture (`pip install pillow` first):
+![the 11 pictures](docs/images/panda_poses.png)
+
+How it runs on the clip:
+
+- **Pictures in flash, not RAM.** `firmware/bag_clip/panda_anim.h` holds each different picture once (11 × 512 bytes = 5.6 KB of flash) plus a play list of (picture, milliseconds). Repeats like "blink, open, blink" reuse the same picture. RAM use is 2 variables.
+- **Non-blocking.** No `delay()`: each pass of `loop()` checks whether the current step's time is up. The screen is only redrawn when the picture actually changes (at most ~5 times a second, during the wave) or once a second for the battery/status text, so Bluetooth and the touch pad are as responsive as before and the I²C bus is idle most of the time.
+- **Dims and stops.** After the *Dim after* time (default 8 s) the screen dims and the animation freezes on the dozing "zzz" picture, redrawing only every 5 s. Any tap or new song wakes it up and the routine starts again. Deep sleep after the *Sleep after* time is unchanged.
+
+### Your own animation
+
+Any animated GIF works (`pip install pillow` first):
 
 ```
-python3 tools/png_to_bitmap.py my_pic.png PANDA_OPEN  > open.h
-python3 tools/png_to_bitmap.py my_pic_blink.png PANDA_BLINK > blink.h
+python3 tools/gif_to_frames.py my.gif --preview check.gif
 ```
 
-Paste each array over the one in `panda.h` (keep the `PANDA_W` / `PANDA_H` lines at the bottom). For one picture with no blink, convert it twice under both names. Draw white on black, or add `--invert` for a black-on-white drawing and `--dither` for photos. The online tool *image2cpp* also works: 64×64, "Horizontal – 1 bit per pixel", Arduino code output.
+That overwrites `firmware/bag_clip/panda_anim.h`; flash the sketch again and it plays. Open `check.gif` first to see exactly what the OLED will show (4× size). The script:
+
+- shrinks the GIF to fit 64×64 (keeps its shape, centred on black) and keeps each frame's own timing;
+- lights up the **bright** parts. For a dark drawing on a white background add `--invert`; for photos or shaded art add `--dither`; if it looks too thin or too blobby, try `--threshold 80` or `--threshold 160`;
+- keeps at most 24 different pictures (`--max-frames`, 512 bytes each) so a long GIF doesn't fill the flash; it picks them evenly and stretches their timing;
+- `--speed 0.5` plays it at half speed, `--rest N` picks the step that's frozen on screen while dimmed (default the first; the default panda uses `--rest 25`, the zzz picture).
+
+Simple, high-contrast GIFs with a plain background look best: on a 1-bit 64×64 screen, cartoon outlines read well and detailed photos turn to noise. To change the default panda itself, edit `tools/draw_panda.py`, then run it and the converter:
+
+```
+python3 tools/draw_panda.py
+python3 tools/gif_to_frames.py docs/images/panda_idle.gif --rest 25
+```
 
 ## Screens
 
@@ -276,7 +299,7 @@ Paste each array over the one in `panda.h` (keep the `PANDA_W` / `PANDA_H` lines
 |---|---|
 | Now playing | Status bar (play/pause icon, Bluetooth icon with an x when the phone isn't connected, battery % or USB), album art on the left, title / artist / ► next-up scrolling on the right, elapsed and total time, progress bar |
 | Paused | Same as now playing with a pause icon for 10 s, then the panda |
-| Panda (idle) | Blinking panda with "Nothing playing", "Paused", "Phone not connected" or "Open the Bag Clip app". Dims after the dim time, sleeps after the sleep time |
+| Panda (idle) | Animated panda with "Nothing playing", "Paused", "Phone not connected" or "Open the Bag Clip app". Dims after the dim time, sleeps after the sleep time |
 | Set me up! | Never paired: open the app and tap Find my clip |
 | Bluetooth PIN | While your phone pairs |
 | Info | Hold the pad 1.5 s: version, phone link, which app is playing, phone battery, clip battery voltage |
@@ -288,7 +311,7 @@ Paste each array over the one in `panda.h` (keep the `PANDA_W` / `PANDA_H` lines
 - [ ] **1. USB & board:** plug in, select ESP32C3 Dev Module + USB CDC On Boot Enabled + Minimal SPIFFS partition, upload a blink/serial test. COM port shows up, upload clean.
 - [ ] **2. OLED & touch:** jumper-wire OLED + TTP223, flash `bag_clip`. OLED shows "Bag Clip v3.0.0" then "Set me up!"; TTP223 LED lights when touched; holding it 1.5 s shows the info screen.
 - [ ] **3. App + Bluetooth:** install the app, do its three steps (PIN on the OLED), play a song in Spotify. Title, artist, album art and times within ~1 s; long titles scroll smoothly. Turn the phone screen off: the clip keeps updating. Hotspot and Wi-Fi can stay off.
-- [ ] **4. Touch, dim & sleep:** 1 tap pauses/plays, 2 taps skip, 3 taps go back (on the phone, within ~0.5 s). Pause: panda after 10 s, dims after 8 s more, sleeps after 5 min. Tap → wakes, and the app reconnects within a few seconds.
+- [ ] **4. Touch, dim & sleep:** 1 tap pauses/plays, 2 taps skip, 3 taps go back (on the phone, within ~0.5 s). Pause: animated panda after 10 s (blinks, waves, eats bamboo, smooth with no stutter), dims and freezes on the "zzz" picture after 8 s more, sleeps after 5 min. A tap while dimmed restarts the animation at full brightness. Tap → wakes, and the app reconnects within a few seconds.
 - [ ] **5. Battery:** USB unplugged, solder LiPo + TP4056 + switch + the two resistors, switch ON. Nothing warm, boots on battery, battery % shows; calibrate `BATT_CAL` against a multimeter. TP4056 LED red while charging / blue when full.
 
 ## Build check
@@ -308,7 +331,7 @@ A green check means it compiles; it doesn't test behaviour on real hardware or a
 - **Text:** the app strips accents ("Beyoncé" → "Beyonce") and turns other non-ASCII characters into `?`, since the OLED font is ASCII only.
 - **Low power:** 80 MHz CPU, slow BLE connection parameters after pairing, slower advertising (every 250–500 ms) while waiting for the phone, deep sleep after the sleep time even while connected.
 - **Pairing:** LE Secure Connections with a random 6-digit PIN on the OLED; unencrypted connections are dropped. Nobody nearby can see what you play or skip your songs.
-- Carried over from v2: smooth time-based scrolling, tap queue, battery gauge and calibration, panda idle screen, settings in flash, sleep/wake on the touch pad, low-battery shutdown.
+- Carried over from v2: smooth time-based scrolling, tap queue, battery gauge and calibration, panda idle screen (now animated), settings in flash, sleep/wake on the touch pad, low-battery shutdown.
 
 ## Known risks / open questions
 
