@@ -6,7 +6,7 @@ static unsigned long lastRead = 0;
 static int lowReadings = 0;
 
 // Resting LiPo voltage -> charge. Approximate; under Wi-Fi load the voltage sags ~50 mV.
-static const int CURVE_MV[]  = {3450, 3600, 3700, 3750, 3800, 3850, 3900, 4000, 4100, 4200};
+static const int CURVE_MV[]  = {3500, 3600, 3700, 3750, 3800, 3850, 3900, 4000, 4100, 4200};
 static const int CURVE_PCT[] = {   0,    8,   20,   30,   42,   55,   65,   80,   92,  100};
 static const int CURVE_N = sizeof(CURVE_MV) / sizeof(CURVE_MV[0]);
 

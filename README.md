@@ -25,6 +25,6 @@ Built on an ESP32-C3 SuperMini with a TTP223 touch sensor, powered by a 500 mAh 
 4. In the app: allow Bluetooth, allow reading what's playing, then **Find my clip** and type the PIN shown on the clip.
 5. Play a song.
 
-Pins: OLED SDA → GPIO8, SCL → GPIO9, TTP223 I/O → GPIO3, battery divider (2 × 100 kΩ) → GPIO4. Battery goes to the **5V** pin only, never 3.3V.
+Pins: OLED SDA → GPIO8, SCL → GPIO9, TTP223 I/O → GPIO3, battery divider (2 × 100 kΩ) → GPIO4. Battery goes to the **5V** pin only (through a 1N5819 diode, stripe towards the ESP32), never 3.3V.
 
 > Every push is built on GitHub (firmware in both modes, plus the APK). Nothing has been tested on real hardware or a phone yet; see the Status table in `PROJECT.md`.

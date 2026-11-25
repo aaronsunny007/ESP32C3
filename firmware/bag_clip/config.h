@@ -48,8 +48,8 @@
 // Multiply the reading by this after comparing with a multimeter (e.g. 4.02 V real / 3.95 V shown = 1.018).
 #define BATT_CAL         1.000f
 #define BATT_MISSING_MV  1500      // below this at the pin*ratio: no divider fitted, hide the icon
-#define BATT_USB_MV      4400      // above this we are on USB 5 V, not the LiPo
-#define BATT_CRITICAL_MV 3450      // the board's 3.3 V regulator browns out around here
+#define BATT_USB_MV      4400      // above this we are on USB 5 V (only without the Step B diode)
+#define BATT_CRITICAL_MV 3500      // battery mV; minus ~0.3 V across the diode, the 3.3 V regulator browns out below this
 #define BATT_READ_MS     5000UL
 
 // ---------- Timing ----------

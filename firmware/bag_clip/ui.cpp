@@ -254,7 +254,7 @@ static void drawInfo(const AppState &st) {
   display.setCursor(0, 46);
   if (batteryPresent()) snprintf(line, sizeof(line), "Batt %d.%02d V %s", batteryMv() / 1000, (batteryMv() % 1000) / 10,
                                  batteryOnUsb() ? "USB" : "");
-  else snprintf(line, sizeof(line), BATT_FITTED ? "Batt: no divider" : "Batt: off (config)");
+  else snprintf(line, sizeof(line), BATT_FITTED ? "Batt: switched off" : "Batt: off (config)");
   display.print(line);
 #if WIFI_MODE
   display.setCursor(0, 56);

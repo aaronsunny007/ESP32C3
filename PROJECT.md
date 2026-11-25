@@ -13,7 +13,7 @@ Source of truth for the hardware: *Spotify Bag Clip Complete Guide v6* (in `docs
 | Project file + firmware v1 saved | Done (25 Nov 2026) |
 | Firmware v2 (Bluetooth setup, battery, panda, album art, queue, settings, OTA) | Written 25 Nov 2026, superseded by v3 |
 | Firmware v3: Bluetooth only + Android app (Wi-Fi optional, off) | Written 25 Nov 2026. Firmware and APK build on GitHub (see "Build check"), **not yet tested on hardware or a phone** |
-| Parts ordered (add 2 × 100 kΩ resistors) | To do |
+| Parts ordered (add 2 × 100 kΩ resistors and a 1N5819 diode) | To do |
 | Pre-flight stage 1: USB & board | To do |
 | Pre-flight stage 2: OLED & touch | To do |
 | Pre-flight stage 3: install app, pair, song shows on the clip | To do |
@@ -21,7 +21,7 @@ Source of truth for the hardware: *Spotify Bag Clip Complete Guide v6* (in `docs
 | Pre-flight stage 5: battery smoke test + battery level | To do |
 | Enclosure + final assembly | To do |
 
-**Next step:** order parts (plus two 100 kΩ resistors), then flash `firmware/bag_clip` for pre-flight stages 1–2, and install the Android app from the latest GitHub build for stage 3.
+**Next step:** order parts (plus two 100 kΩ resistors and a 1N5819 Schottky diode), then flash `firmware/bag_clip` for pre-flight stages 1–2, and install the Android app from the latest GitHub build for stage 3.
 
 ## How the clip talks to your phone (Bluetooth only)
 
@@ -115,6 +115,7 @@ The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) and the Wi
 | TP4056 charger | "TP4056 Type-C with protection" | 6 pads (B+, B-, OUT+, OUT-), not the 4-pad unprotected one | 32–55 |
 | LiPo battery | "3.7V 500mAh LiPo battery" | Slim pouch ~30×20×6 mm | 80–150 |
 | Slide switch | "Mini SPDT slide switch 3 pin" | Cuts battery fully | 10–20 |
+| **Schottky diode 1N5819** (or SS14 / SS34 if you're happy with SMD) | "1N5819 Schottky diode" (buy a few) | 1 A, through-hole; the stripe marks the cathode. Stops USB back-feeding the battery (Step B) | 5–10 |
 | **2 × 100 kΩ resistors** | "100K ohm 1/4W resistor" (1% metal film if possible) | For the battery gauge | 5–10 |
 | 100 nF capacitor (optional) | "104 ceramic capacitor" | Steadier battery reading | 2 |
 | Jumper wires | "Female to Female jumper wires 40 pin" | For the no-solder bench test | 40–60 |
@@ -122,10 +123,10 @@ The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) and the Wi
 
 ## Safety rules (read before wiring)
 
-1. **Battery goes to the 5V pin only.** TP4056 OUT+ (through the switch) → ESP32-C3 **5V**. Never 3.3V: a full LiPo is 4.2 V and will damage the 3.3 V rail.
+1. **Battery goes to the 5V pin only.** TP4056 OUT+ (through the switch and the diode) → ESP32-C3 **5V**. Never 3.3V: a full LiPo is 4.2 V and will damage the 3.3 V rail.
 2. **Never wire the battery straight to GPIO4.** It must go through the two resistors; 4.2 V on a GPIO pin will damage the chip.
 3. **Check the OLED pin labels.** Some print GND, VCC, SCL, SDA and others VCC, GND, SCL, SDA. Wire by the text on *your* board.
-4. **Never dual-power.** Switch OFF before plugging USB-C into either the TP4056 or the ESP32-C3.
+4. **Fit the diode (Step B).** It stops USB on the ESP32 from feeding back into the LiPo. Without it, the switch must be OFF before plugging USB-C into the ESP32-C3. Check the stripe direction before soldering: stripe towards the ESP32.
 
 ## Wiring
 
@@ -141,22 +142,33 @@ The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) and the Wi
 
 For this bench test leave `BATT_FITTED 0` in `config.h` (the default): with no battery resistors fitted the clip hides the battery icon instead of reading the empty pin as a flat battery.
 
-### Step B: battery and charging (8 solder joints)
+### Step B: battery and charging (10 solder joints)
 
 | From | To | Notes |
 |---|---|---|
 | LiPo red (+) | TP4056 B+ | |
 | LiPo black (−) | TP4056 B− | |
 | TP4056 OUT+ | Switch centre pin | |
-| Switch outer pin | ESP32-C3 **5V** | Feeds the onboard 3.3 V regulator |
+| Switch outer pin | Diode **anode** (the end *without* the stripe) | |
+| Diode **cathode** (the end *with* the stripe) | ESP32-C3 **5V** | Feeds the onboard 3.3 V regulator |
 | TP4056 OUT− | ESP32-C3 GND | |
+
+```
+ LiPo ── TP4056 ── OUT+ ── switch ──┬──►|── ESP32-C3 5V pin ── (USB-C on the ESP32 also lands here)
+                                    │  1N5819
+                                    └── battery divider (Step B2)
+```
+
+**Why the diode:** the ESP32's 5V pin is wired straight to its USB-C socket. Without the diode, plugging a cable into the ESP32 while the switch is on pushes USB's 5 V backwards into the TP4056 output and the LiPo. The Schottky diode only lets current flow from the battery to the board, never back, so it's safe to plug USB into either socket with the switch in any position. Put heat-shrink over it.
+
+The price is ~0.3 V lost across the diode, so the board sees about 3.4 V from a half-empty battery instead of 3.7 V. That's still enough for the regulator; the clip now stops at 3.5 V battery instead of 3.45 V.
 
 ### Step B2: battery level (2 resistors, 4 solder joints)
 
-A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-C3's ADC can read it.
+A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-C3's ADC can read it. It goes on the **battery side of the diode** (the switch's outer pin), so it measures the real battery voltage, not the diode's output or USB.
 
 ```
- ESP32-C3 5V pin (= switch output = battery +)
+ Switch outer pin (= battery + when switched on; same pad as the diode's anode)
         │
       [R1 100 kΩ]
         │
@@ -169,20 +181,20 @@ A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-
 
 | From | To |
 |---|---|
-| ESP32-C3 **5V** pin (same pad as the switch wire) | R1, one leg |
+| Switch outer pin (same pad as the diode's anode) | R1, one leg |
 | R1, other leg | **GPIO 4** and R2, one leg |
 | R2, other leg | ESP32-C3 **GND** |
 
 - Taking it after the switch means the divider draws nothing when the clip is switched off. While on, it draws ~20 µA, which is small next to the clip itself.
-- With USB plugged into the ESP32 (switch off) the 5V pin sits at ~4.7 V, so the screen shows **USB** and a lightning bolt instead of a percentage.
+- Switch off and USB in the ESP32: the divider has no power, so the clip simply hides the battery icon. Switch on and USB in: the board runs from USB (the diode blocks the battery) and the icon shows the battery's charge.
 - **Switch the reading on:** set `BATT_FITTED 1` in `config.h` and flash again. Until then the clip ignores GPIO 4 (no battery icon, no low-battery shutdown).
 - **Calibrate once:** hold the touch pad for 1.5 s to open the info screen, compare "Batt x.xx V" with a multimeter on the battery, and set `BATT_CAL` in `config.h` to *real ÷ shown* (e.g. 4.02 / 3.95 = 1.018).
-- Below ~3.45 V the board's regulator starts to brown out, so the clip shows "Battery low / Charge or switch off" and sleeps. **Switch it off** (or charge it): even asleep the board keeps drawing a little, and a flat LiPo left on keeps draining.
+- Below ~3.5 V (battery) the board's regulator starts to brown out after the diode drop, so the clip shows "Battery low / Charge or switch off" and sleeps. **Switch it off** (or charge it): even asleep the board keeps drawing a little, and a flat LiPo left on keeps draining.
+- Using different resistors: set `BATT_DIVIDER` in `config.h` to (R1 + R2) ÷ R2. Keep the pin voltage under 2.5 V.
 
 ### Step B3: remove the power LED (recommended)
 
 The SuperMini's red power LED is on whenever the board has power, **including deep sleep**, and draws about 1 mA. That's more than the rest of the sleeping clip and empties a 500 mAh battery in about two weeks of "sleep". Remove it: hold the iron on the LED (or its tiny resistor next to it) for a second and flick it off, or cut its resistor with a craft knife. The blue LED on GPIO 8 is separate and only flickers with OLED traffic. After this, measure the current with a multimeter in series with the switch: asleep it should be well under 1 mA. For storage, always slide the switch off.
-- Using different resistors: set `BATT_DIVIDER` in `config.h` to (R1 + R2) ÷ R2. Keep the pin voltage under 2.5 V.
 
 ### Step C: sandwich stack
 
@@ -214,7 +226,7 @@ The default Bluetooth-only build needs **no `secrets.h`**, no Spotify keys and n
 ### Phone app (Android 8 or newer)
 
 1. **Get the APK.** On GitHub open **Actions → Build firmware and app**, click the latest green run, and download **bag-clip-app** at the bottom (a zip with `app-debug.apk` inside). Or build it yourself: open `phone-app/` in Android Studio and press Run.
-2. **Install it.** Copy the APK to the phone and open it. Android asks to allow installing from that app (Files / Chrome): allow it. Play Protect may warn that it's an unknown app; choose *Install anyway*.
+2. **Install it.** Copy the APK to the phone and open it. Android asks to allow installing from that app (Files / Chrome): allow it. Play Protect may warn that it's an unknown app; choose *Install anyway*. **Updating later:** every build is signed with the same key (`phone-app/app/bagclip-debug.keystore`), so a newer APK installs straight over the old one and keeps all the permissions below. No uninstall needed.
 3. **Open Bag Clip** and do the three steps on its screen:
    1. **Allow Bluetooth** (Android asks for "Nearby devices").
    2. **Allow reading what's playing**: switch on *Bag Clip* in the *Notification access* list. Android calls it that because media info comes through the same door; the app ignores your notifications' content. **Android 13+:** for apps installed from a file this switch is greyed out at first. Go to *Settings → Apps → Bag Clip → ⋮ (top right) → Allow restricted settings*, then switch it on.
@@ -279,7 +291,7 @@ Paste each array over the one in `panda.h` (keep the `PANDA_W` / `PANDA_H` lines
 
 | Screen | When |
 |---|---|
-| Now playing | Status bar (play/pause icon, Bluetooth icon with an x when the phone isn't connected, battery % or USB), album art on the left, title / artist / ► next-up scrolling on the right, elapsed and total time, progress bar |
+| Now playing | Status bar (play/pause icon, Bluetooth icon with an x when the phone isn't connected, battery %), album art on the left, title / artist / ► next-up scrolling on the right, elapsed and total time, progress bar |
 | Paused | Same as now playing with a pause icon for 10 s, then the panda |
 | Panda (idle) | Blinking panda with "Nothing playing", "Paused", "Phone not connected" or "Open the Bag Clip app". Dims after the dim time, sleeps after the sleep time |
 | Set me up! | Never paired: open the app and tap Find my clip |
@@ -294,7 +306,7 @@ Paste each array over the one in `panda.h` (keep the `PANDA_W` / `PANDA_H` lines
 - [ ] **2. OLED & touch:** jumper-wire OLED + TTP223, flash `bag_clip` (with `BATT_FITTED 0`, the default). OLED shows "Bag Clip v3.0.1" then "Set me up!"; TTP223 LED lights when touched; holding it 1.5 s shows the info screen.
 - [ ] **3. App + Bluetooth:** install the app, do its three steps (PIN on the OLED), play a song in Spotify. Title, artist, album art and times within ~1 s; long titles scroll smoothly. Turn the phone screen off: the clip keeps updating. Hotspot and Wi-Fi can stay off.
 - [ ] **4. Touch, dim & sleep:** 1 tap pauses/plays, 2 taps skip, 3 taps go back (on the phone, within ~0.5 s). Pause: panda after 10 s, dims after 8 s more, sleeps after 5 min. Tap → wakes, and the app reconnects within a few seconds.
-- [ ] **5. Battery:** USB unplugged, solder LiPo + TP4056 + switch + the two resistors, remove the power LED (Step B3), set `BATT_FITTED 1` and flash, switch ON. Nothing warm, boots on battery, battery % shows; calibrate `BATT_CAL` against a multimeter. TP4056 LED red while charging / blue when full.
+- [ ] **5. Battery:** USB unplugged, solder LiPo + TP4056 + switch + diode (stripe towards the ESP32) + the two resistors, remove the power LED (Step B3), set `BATT_FITTED 1` and flash, switch ON. Nothing warm, boots on battery, battery % shows; calibrate `BATT_CAL` against a multimeter. TP4056 LED red while charging / blue when full. Then plug USB into the ESP32 with the switch ON: the clip keeps running and nothing gets warm (the diode is doing its job).
 
 ## Build check
 
@@ -328,5 +340,5 @@ A green check means it compiles; it doesn't test behaviour on real hardware or a
 - **Spotify certificates (Wi-Fi mode):** `certs.h` bundles 7 common root CAs. If every request fails with a TLS error, set `SPOTIFY_TLS_INSECURE 1` in `secrets.h` for a bench test and report it.
 - **Battery icon accuracy:** voltage-based, ±10 %. It reads a bit low under load (Wi-Fi mode especially) and a bit high while charging.
 - **GPIO 8 is the SuperMini's onboard LED and a boot strapping pin.** With the OLED's pull-ups it boots fine; the LED may flicker with I2C traffic. GPIO 9 is the BOOT button, so don't hold it while powering on.
-- **Battery into the 5V pin:** the onboard regulator needs ~3.4 V+ input, so the last ~10 % of the LiPo isn't usable (the clip sleeps at 3.45 V).
+- **Battery into the 5V pin through a diode:** the onboard regulator needs ~3.2 V+ at the 5V pin and the diode drops ~0.3 V, so the last ~10–15 % of the LiPo isn't usable (the clip sleeps at 3.5 V battery). An "ideal diode" chip would lose almost nothing, but needs SMD soldering.
 - **Bluetooth power:** advertising and the slow connection add a little drain while awake; both stop completely in deep sleep. Automatic light sleep between radio events would save more but isn't enabled in the stock Arduino core; a possible later improvement.
