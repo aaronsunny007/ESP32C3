@@ -1,6 +1,7 @@
-# Compiles the firmware on every push and pull request, so build errors show up
-# on GitHub before you flash anything. Uses the placeholder secrets.example.h.
-name: Build firmware
+# Compiles the firmware (Bluetooth-only default, and the optional Wi-Fi mode) and builds
+# the Android app on every push and pull request, so errors show up on GitHub before you
+# flash or install anything. The .bin files and the APK are attached to each run.
+name: Build firmware and app
 
 on:
   push:
@@ -8,8 +9,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  firmware:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [ble, wifi]
     steps:
       - uses: actions/checkout@v4
 
@@ -21,18 +26,49 @@ jobs:
           arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli core update-index
           arduino-cli core install esp32:esp32@3.1.1
-          arduino-cli lib install "Adafruit SSD1306" "Adafruit GFX Library" "ArduinoJson@7.2.1" "NimBLE-Arduino@2.1.0" "TJpg_Decoder@1.1.0"
+          arduino-cli lib install "Adafruit SSD1306" "Adafruit GFX Library" "NimBLE-Arduino@2.1.0"
+          if [ "${{ matrix.mode }}" = "wifi" ]; then
+            arduino-cli lib install "ArduinoJson@7.2.1" "TJpg_Decoder@1.1.0"
+          fi
 
-      - name: Compile
+      - name: Compile (${{ matrix.mode }})
         run: |
-          cp firmware/bag_clip/secrets.example.h firmware/bag_clip/secrets.h
+          EXTRA=""
+          if [ "${{ matrix.mode }}" = "wifi" ]; then
+            # Wi-Fi mode needs secrets.h; the placeholder file is enough to compile.
+            cp firmware/bag_clip/secrets.example.h firmware/bag_clip/secrets.h
+            EXTRA="--build-property compiler.cpp.extra_flags=-DWIFI_MODE=1"
+          fi
           arduino-cli compile \
             --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=min_spiffs \
             --warnings default \
             --output-dir build \
+            $EXTRA \
             firmware/bag_clip
 
       - uses: actions/upload-artifact@v4
         with:
-          name: bag_clip-firmware
+          name: bag_clip-firmware-${{ matrix.mode }}
           path: build/bag_clip.ino.bin
+
+  android-app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Build APK
+        run: gradle -p phone-app assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bag-clip-app
+          path: phone-app/app/build/outputs/apk/debug/app-debug.apk

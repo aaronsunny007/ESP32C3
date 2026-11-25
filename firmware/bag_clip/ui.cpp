@@ -1,12 +1,15 @@
 #include "ui.h"
 #include <Wire.h>
-#include <WiFi.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "config.h"
 #include "battery.h"
 #include "settings.h"
 #include "panda.h"
+#include "ble_link.h"
+#if WIFI_MODE
+#include <WiFi.h>
+#endif
 
 // 400 kHz I2C during and after a frame. A full frame then takes ~23 ms.
 static Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1, 400000UL, 400000UL);
@@ -94,6 +97,7 @@ static void drawBattery(int xRight, int y) {
   display.print(txt);
 }
 
+#if WIFI_MODE
 static void drawWifi(int x, int y, bool connected) {
   int rssi = connected ? WiFi.RSSI() : -100;
   int bars = rssi > -60 ? 3 : rssi > -70 ? 2 : rssi > -82 ? 1 : 0;
@@ -107,11 +111,32 @@ static void drawWifi(int x, int y, bool connected) {
     display.drawLine(x + 8, y, x + 6, y + 2, SSD1306_WHITE);
   }
 }
+#endif
+
+// Bluetooth rune; a small x next to it while the phone isn't connected.
+static void drawBt(int x, int y, bool connected) {
+  display.drawBitmap(x, y, ICON_BT, 7, 7, SSD1306_WHITE);
+  if (!connected) {
+    display.drawLine(x + 7, y, x + 9, y + 2, SSD1306_WHITE);
+    display.drawLine(x + 9, y, x + 7, y + 2, SSD1306_WHITE);
+  }
+}
+
+static void drawPhoneBattery(int x, int y, int pct) {   // tiny phone outline + %
+  if (pct < 0) return;
+  display.drawRect(x, y, 5, 7, SSD1306_WHITE);
+  display.drawPixel(x + 2, y + 5, SSD1306_WHITE);
+  display.setCursor(x + 7, y);
+  display.print(pct);
+  display.print('%');
+}
 
 static void drawStatusBar(const AppState &st) {
   display.drawBitmap(0, 0, st.playing ? ICON_PLAY : ICON_PAUSE, 7, 7, SSD1306_WHITE);
-  drawWifi(11, 0, st.wifi == NET_CONNECTED);
-  if (st.bleConnected) display.drawBitmap(23, 0, ICON_BT, 7, 7, SSD1306_WHITE);
+  drawBt(11, 0, st.bleConnected);
+#if WIFI_MODE
+  drawWifi(24, 0, st.wifi == NET_CONNECTED);
+#endif
   drawBattery(SCREEN_WIDTH, 0);
 }
 
@@ -181,7 +206,15 @@ static void drawPanda(const AppState &st) {
   bool blink = (millis() % 4000) < 150;
   display.drawBitmap(0, 0, blink ? PANDA_BLINK : PANDA_OPEN, PANDA_W, PANDA_H, SSD1306_WHITE);
   int x = PANDA_W + 4;
-  if (st.hasTrack && !st.playing) {
+  if (!st.bleConnected && !st.spotifyDirect) {
+    display.setCursor(x, 6);  display.print("Phone not");
+    display.setCursor(x, 16); display.print("connected");
+    display.setCursor(x, 28); display.print("zzz");
+  } else if (!st.appLinked && !st.spotifyDirect) {
+    display.setCursor(x, 6);  display.print("Open the");
+    display.setCursor(x, 16); display.print("Bag Clip");
+    display.setCursor(x, 26); display.print("app");
+  } else if (st.hasTrack && !st.playing) {
     display.setCursor(x, 6);  display.print("Paused");
     display.setCursor(x, 18); display.print("tap to");
     display.setCursor(x, 28); display.print("play");
@@ -191,8 +224,10 @@ static void drawPanda(const AppState &st) {
     display.drawBitmap(x + 46, 26, ICON_NOTE, 7, 7, SSD1306_WHITE);
     display.setCursor(x, 28); display.print("zzz");
   }
-  drawWifi(x, 44, st.wifi == NET_CONNECTED);
-  if (st.bleConnected) display.drawBitmap(x + 12, 44, ICON_BT, 7, 7, SSD1306_WHITE);
+  drawBt(x, 44, st.bleConnected);
+#if WIFI_MODE
+  drawWifi(x + 13, 44, st.wifi == NET_CONNECTED);
+#endif
   drawBattery(SCREEN_WIDTH, 55);
 }
 
@@ -201,19 +236,27 @@ static void drawInfo(const AppState &st) {
   display.setCursor(0, 0);
   display.print("Bag Clip v" FW_VERSION);
   display.setCursor(0, 12);
-  if (st.wifi == NET_CONNECTED) { display.print(st.ssid); display.setCursor(0, 22); display.print(st.ip); }
-  else display.print("Wi-Fi not connected");
+  display.print(st.appLinked ? "Phone: app linked" : st.bleConnected ? "Phone: connected" : "Phone: not connected");
+  display.setCursor(0, 22);
+  if (st.sourceApp[0]) { display.print("From "); display.print(st.sourceApp); }
+  drawPhoneBattery(SCREEN_WIDTH - 36, 22, st.phoneBattery);
   display.setCursor(0, 34);
+#if WIFI_MODE
+  if (st.wifi == NET_CONNECTED) display.print(st.ip);
+  else display.print("Wi-Fi not connected");
+#else
   display.print("BT: " DEVICE_NAME);
-  if (st.bleConnected) display.print(" (on)");
+#endif
   display.setCursor(0, 46);
   if (batteryPresent()) snprintf(line, sizeof(line), "Batt %d.%02d V %s", batteryMv() / 1000, (batteryMv() % 1000) / 10,
                                  batteryOnUsb() ? "USB" : "");
   else snprintf(line, sizeof(line), "Batt: no divider");
   display.print(line);
+#if WIFI_MODE
   display.setCursor(0, 56);
   snprintf(line, sizeof(line), "Spotify %d", st.lastHttpStatus);
   display.print(line);
+#endif
 }
 
 void uiRender(Screen screen, const AppState &st, bool force) {
@@ -231,9 +274,15 @@ void uiRender(Screen screen, const AppState &st, bool force) {
     case SCR_SETUP:
       display.drawBitmap(0, 0, ICON_BT, 7, 7, SSD1306_WHITE);
       centered("Set me up!", 4);
-      centered("On your phone, open", 22);
-      centered("the Bag Clip page", 32);
-      centered("and connect to", 42);
+      if (st.wifi == NET_NEED_SETUP && st.spotifyDirect) {   // Wi-Fi mode, no network saved
+        centered("Add Wi-Fi from the", 22);
+        centered("phone page over", 32);
+        centered("Bluetooth:", 42);
+      } else {
+        centered("Open the Bag Clip", 22);
+        centered("app, tap Find clip,", 32);
+        centered("then type the PIN:", 42);
+      }
       centered(DEVICE_NAME, 54);
       break;
     case SCR_CONNECTING:

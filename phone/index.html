@@ -63,8 +63,8 @@
       <div id="status" class="muted">-</div>
     </section>
 
-    <section>
-      <h2>Wi-Fi networks</h2>
+    <section id="wifiSection">
+      <h2>Wi-Fi networks (Wi-Fi mode only)</h2>
       <ul id="nets"></ul>
       <label for="ssid">Network name</label>
       <input id="ssid" type="text" maxlength="32" autocomplete="off">
@@ -121,9 +121,14 @@ function showStatus(text) {
   $('track').textContent = s.title ? `${s.playing === '1' ? '▶' : '❚❚'} ${s.title} · ${s.artist}` : 'Nothing playing';
   $('next').textContent = s.next ? `Next: ${s.next}` : '';
   const bat = s.usb === '1' ? 'USB power' : (s.bat === '-1' ? 'no battery sensor' : `${s.bat}% (${(s.mv / 1000).toFixed(2)} V)`);
-  const wifi = s.wifi === 'connected' ? `${s.ssid} (${s.ip}, http://bagclip.local)` : s.wifi;
+  const lines = [`Battery: ${bat}`, `Phone app: ${s.app === '1' ? 'connected' : 'not connected'}`];
+  if (s.mode === 'wifi' || s.wifi) {
+    const wifi = s.wifi === 'connected' ? `${s.ssid} (${s.ip}, http://bagclip.local)` : s.wifi;
+    lines.push(`Wi-Fi: ${wifi}`, `Spotify: ${s.spotify}`);
+  }
+  lines.push(`Firmware: ${s.fw}`);
   $('status').innerHTML = '';
-  for (const line of [`Battery: ${bat}`, `Wi-Fi: ${wifi}`, `Spotify: ${s.spotify}`, `Firmware: ${s.fw}`]) {
+  for (const line of lines) {
     const d = document.createElement('div'); d.textContent = line; $('status').appendChild(d);
   }
 }
@@ -158,13 +163,16 @@ async function connect() {
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(SVC);
     chars = {
-      wifi: await svc.getCharacteristic(WIFI), settings: await svc.getCharacteristic(SETTINGS),
+      settings: await svc.getCharacteristic(SETTINGS),
       control: await svc.getCharacteristic(CONTROL), status: await svc.getCharacteristic(STATUS),
     };
+    // The Wi-Fi list only exists when the firmware is built with WIFI_MODE 1.
+    try { chars.wifi = await svc.getCharacteristic(WIFI); } catch (e) { chars.wifi = null; }
+    $('wifiSection').hidden = !chars.wifi;
     // The first secure read makes the phone ask for the 6-digit PIN shown on the clip.
     log('If asked, type the PIN shown on the clip.');
     showStatus(await readText('status'));
-    showNets(await readText('wifi'));
+    if (chars.wifi) showNets(await readText('wifi'));
     showSettings(await readText('settings'));
     await chars.status.startNotifications();
     chars.status.addEventListener('characteristicvaluechanged', () => readText('status').then(showStatus));

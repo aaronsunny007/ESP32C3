@@ -16,6 +16,7 @@ struct TrackInfo {
 
 namespace Spotify {
   void begin();
+  bool configured();                         // keys filled in secrets.h
   bool refreshToken();                       // true when we have a valid access token
   bool authFailed();                         // the keys in secrets.h were rejected
   int  nowPlaying(TrackInfo &t);             // 200 playing/paused, 204 nothing, <0 or 4xx/5xx error
@@ -27,6 +28,3 @@ namespace Spotify {
   // Downloads a (small) image into buf. Returns the byte count, or <0 on error.
   int  downloadImage(const char *url, uint8_t *buf, size_t cap);
 }
-
-// Replaces non-ASCII (UTF-8) characters with '?' so the built-in font can draw them.
-void toDisplayable(const char *in, char *out, size_t outLen);

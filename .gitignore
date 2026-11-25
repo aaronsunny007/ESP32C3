@@ -8,3 +8,11 @@ build/
 *.bin
 *.elf
 *.map
+
+# Android app build output and local machine files
+phone-app/.gradle/
+phone-app/**/build/
+phone-app/local.properties
+*.apk
+*.keystore
+*.jks
