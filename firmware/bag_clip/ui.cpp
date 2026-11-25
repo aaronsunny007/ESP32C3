@@ -1,12 +1,15 @@
 #include "ui.h"
 #include <Wire.h>
-#include <WiFi.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include "config.h"
 #include "battery.h"
 #include "settings.h"
-#include "panda.h"
+#include "panda_anim.h"
+#include "ble_link.h"
+#if WIFI_MODE
+#include <WiFi.h>
+#endif
 
 // 400 kHz I2C during and after a frame. A full frame then takes ~23 ms.
 static Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1, 400000UL, 400000UL);
@@ -94,6 +97,7 @@ static void drawBattery(int xRight, int y) {
   display.print(txt);
 }
 
+#if WIFI_MODE
 static void drawWifi(int x, int y, bool connected) {
   int rssi = connected ? WiFi.RSSI() : -100;
   int bars = rssi > -60 ? 3 : rssi > -70 ? 2 : rssi > -82 ? 1 : 0;
@@ -107,11 +111,32 @@ static void drawWifi(int x, int y, bool connected) {
     display.drawLine(x + 8, y, x + 6, y + 2, SSD1306_WHITE);
   }
 }
+#endif
+
+// Bluetooth rune; a small x next to it while the phone isn't connected.
+static void drawBt(int x, int y, bool connected) {
+  display.drawBitmap(x, y, ICON_BT, 7, 7, SSD1306_WHITE);
+  if (!connected) {
+    display.drawLine(x + 7, y, x + 9, y + 2, SSD1306_WHITE);
+    display.drawLine(x + 9, y, x + 7, y + 2, SSD1306_WHITE);
+  }
+}
+
+static void drawPhoneBattery(int x, int y, int pct) {   // tiny phone outline + %
+  if (pct < 0) return;
+  display.drawRect(x, y, 5, 7, SSD1306_WHITE);
+  display.drawPixel(x + 2, y + 5, SSD1306_WHITE);
+  display.setCursor(x + 7, y);
+  display.print(pct);
+  display.print('%');
+}
 
 static void drawStatusBar(const AppState &st) {
   display.drawBitmap(0, 0, st.playing ? ICON_PLAY : ICON_PAUSE, 7, 7, SSD1306_WHITE);
-  drawWifi(11, 0, st.wifi == NET_CONNECTED);
-  if (st.bleConnected) display.drawBitmap(23, 0, ICON_BT, 7, 7, SSD1306_WHITE);
+  drawBt(11, 0, st.bleConnected);
+#if WIFI_MODE
+  drawWifi(24, 0, st.wifi == NET_CONNECTED);
+#endif
   drawBattery(SCREEN_WIDTH, 0);
 }
 
@@ -160,28 +185,69 @@ static void drawNowPlaying(const AppState &st) {
   drawStatusBar(st);   // drawn last so long text never covers it
 
   // Progress: interpolated between polls so the bar and clock tick every second.
+  // A length of 0 means the app doesn't know it (live streams, some podcasts): the
+  // clock still counts up, the total shows "--:--" and the bar stays empty.
+  bool knownLength = st.durationMs > 1;
   long shown = st.progressMs;
   if (st.playing) shown += (long)(millis() - st.progressStamp);
-  shown = constrain(shown, 0L, st.durationMs);
+  shown = knownLength ? constrain(shown, 0L, st.durationMs) : max(0L, shown);
   char el[10], tot[10];
   formatTime(shown, el, sizeof(el));
-  formatTime(st.durationMs, tot, sizeof(tot));
+  if (knownLength) formatTime(st.durationMs, tot, sizeof(tot));
+  else strlcpy(tot, "--:--", sizeof(tot));
   display.fillRect(0, 45, SCREEN_WIDTH, 19, SSD1306_BLACK);
   display.setCursor(0, 46);
   display.print(el);
   display.setCursor(SCREEN_WIDTH - strlen(tot) * 6, 46);
   display.print(tot);
-  int barW = (int)((int64_t)shown * (SCREEN_WIDTH - 4) / max(1L, st.durationMs));
+  int barW = knownLength ? (int)((int64_t)shown * (SCREEN_WIDTH - 4) / st.durationMs) : 0;
   display.drawRoundRect(0, 56, SCREEN_WIDTH, 8, 3, SSD1306_WHITE);
   display.fillRect(2, 58, barW, 4, SSD1306_WHITE);
 }
 
+// ---------- idle animation ----------
+// The pictures and their timing live in flash (panda_anim.h, made by tools/gif_to_frames.py);
+// the only RAM used is the step number and when it started.
+static uint8_t pandaStep = 0;
+static unsigned long pandaStepAt = 0;
+static bool pandaResting = false;
+static bool pandaDirty = false;            // picture switched outside pandaAdvance(): redraw now
+
+void uiPandaRest(bool rest) {
+  if (rest == pandaResting) return;
+  pandaResting = rest;
+  pandaStep = rest ? PANDA_ANIM_REST : 0;   // dozing picture while dim; start over when woken
+  pandaStepAt = millis();
+  pandaDirty = true;
+}
+
+// Moves to the next step when its time is up. True when the picture changed.
+static bool pandaAdvance() {
+  if (pandaResting || PANDA_ANIM_STEPS < 2) return false;
+  unsigned long now = millis();
+  uint16_t ms = pgm_read_word(&PANDA_ANIM_SEQ[pandaStep].ms);
+  if (now - pandaStepAt < ms) return false;
+  // Catch up if a long frame (or the info screen) kept us away, without replaying every step.
+  pandaStepAt = (now - pandaStepAt > 2000UL) ? now : pandaStepAt + ms;
+  uint8_t before = pgm_read_byte(&PANDA_ANIM_SEQ[pandaStep].frame);
+  pandaStep = (pandaStep + 1) % PANDA_ANIM_STEPS;
+  return pgm_read_byte(&PANDA_ANIM_SEQ[pandaStep].frame) != before;
+}
+
 static void drawPanda(const AppState &st) {
-  // Blink for 150 ms every 4 s.
-  bool blink = (millis() % 4000) < 150;
-  display.drawBitmap(0, 0, blink ? PANDA_BLINK : PANDA_OPEN, PANDA_W, PANDA_H, SSD1306_WHITE);
-  int x = PANDA_W + 4;
-  if (st.hasTrack && !st.playing) {
+  uint8_t frame = pgm_read_byte(&PANDA_ANIM_SEQ[pandaStep].frame);
+  display.drawBitmap(0, (SCREEN_HEIGHT - PANDA_ANIM_H) / 2,
+                     PANDA_ANIM_FRAMES_DATA[frame], PANDA_ANIM_W, PANDA_ANIM_H, SSD1306_WHITE);
+  int x = PANDA_ANIM_W + 4;   // text to the right of the animation
+  if (!st.bleConnected && !st.spotifyDirect) {
+    display.setCursor(x, 6);  display.print("Phone not");
+    display.setCursor(x, 16); display.print("connected");
+    display.setCursor(x, 28); display.print("zzz");
+  } else if (!st.appLinked && !st.spotifyDirect) {
+    display.setCursor(x, 6);  display.print("Open the");
+    display.setCursor(x, 16); display.print("Bag Clip");
+    display.setCursor(x, 26); display.print("app");
+  } else if (st.hasTrack && !st.playing) {
     display.setCursor(x, 6);  display.print("Paused");
     display.setCursor(x, 18); display.print("tap to");
     display.setCursor(x, 28); display.print("play");
@@ -191,8 +257,10 @@ static void drawPanda(const AppState &st) {
     display.drawBitmap(x + 46, 26, ICON_NOTE, 7, 7, SSD1306_WHITE);
     display.setCursor(x, 28); display.print("zzz");
   }
-  drawWifi(x, 44, st.wifi == NET_CONNECTED);
-  if (st.bleConnected) display.drawBitmap(x + 12, 44, ICON_BT, 7, 7, SSD1306_WHITE);
+  drawBt(x, 44, st.bleConnected);
+#if WIFI_MODE
+  drawWifi(x + 13, 44, st.wifi == NET_CONNECTED);
+#endif
   drawBattery(SCREEN_WIDTH, 55);
 }
 
@@ -201,25 +269,45 @@ static void drawInfo(const AppState &st) {
   display.setCursor(0, 0);
   display.print("Bag Clip v" FW_VERSION);
   display.setCursor(0, 12);
-  if (st.wifi == NET_CONNECTED) { display.print(st.ssid); display.setCursor(0, 22); display.print(st.ip); }
-  else display.print("Wi-Fi not connected");
+  display.print(st.appLinked ? "Phone: app linked" : st.bleConnected ? "Phone: connected" : "Phone: not connected");
+  display.setCursor(0, 22);
+  if (st.sourceApp[0]) { display.print("From "); display.print(st.sourceApp); }
+  drawPhoneBattery(SCREEN_WIDTH - 36, 22, st.phoneBattery);
   display.setCursor(0, 34);
+#if WIFI_MODE
+  if (st.wifi == NET_CONNECTED) display.print(st.ip);
+  else display.print("Wi-Fi not connected");
+#else
   display.print("BT: " DEVICE_NAME);
-  if (st.bleConnected) display.print(" (on)");
+#endif
   display.setCursor(0, 46);
   if (batteryPresent()) snprintf(line, sizeof(line), "Batt %d.%02d V %s", batteryMv() / 1000, (batteryMv() % 1000) / 10,
                                  batteryOnUsb() ? "USB" : "");
-  else snprintf(line, sizeof(line), "Batt: no divider");
+  else snprintf(line, sizeof(line), BATT_FITTED ? "Batt: switched off" : "Batt: off (config)");
   display.print(line);
+#if WIFI_MODE
   display.setCursor(0, 56);
   snprintf(line, sizeof(line), "Spotify %d", st.lastHttpStatus);
   display.print(line);
+#endif
 }
 
 void uiRender(Screen screen, const AppState &st, bool force) {
-  // Moving screens get ~40 fps, static ones 4 fps to save power.
-  unsigned long interval = (screen == SCR_NOW_PLAYING || screen == SCR_OTA) ? FRAME_MS : 250;
-  if (!force && millis() - lastFrame < interval) return;
+  // Moving screens get ~40 fps, static ones 4 fps to save power. The idle panda is only
+  // redrawn when its picture changes (a few times a second at most) or once a second for
+  // the battery / status text; while dimmed it stays on one picture.
+  bool due;
+  if (screen == SCR_PANDA) {
+    bool newPicture = pandaAdvance() || pandaDirty;
+    pandaDirty = false;
+    bool hasToast = st.toast[0] && (long)(millis() - st.toastUntil) < 300;   // show and clear it promptly
+    unsigned long refresh = hasToast ? 250UL : pandaResting ? 5000UL : 1000UL;
+    due = newPicture || millis() - lastFrame >= refresh;
+  } else {
+    unsigned long interval = (screen == SCR_NOW_PLAYING || screen == SCR_OTA) ? FRAME_MS : 250;
+    due = millis() - lastFrame >= interval;
+  }
+  if (!force && !due) return;
   lastFrame = millis();
 
   display.clearDisplay();
@@ -231,9 +319,15 @@ void uiRender(Screen screen, const AppState &st, bool force) {
     case SCR_SETUP:
       display.drawBitmap(0, 0, ICON_BT, 7, 7, SSD1306_WHITE);
       centered("Set me up!", 4);
-      centered("On your phone, open", 22);
-      centered("the Bag Clip page", 32);
-      centered("and connect to", 42);
+      if (st.wifi == NET_NEED_SETUP && st.spotifyDirect) {   // Wi-Fi mode, no network saved
+        centered("Add Wi-Fi from the", 22);
+        centered("phone page over", 32);
+        centered("Bluetooth:", 42);
+      } else {
+        centered("Open the Bag Clip", 22);
+        centered("app, tap Find clip,", 32);
+        centered("then type the PIN:", 42);
+      }
       centered(DEVICE_NAME, 54);
       break;
     case SCR_CONNECTING:

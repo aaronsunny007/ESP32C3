@@ -1,3 +1,7 @@
+// Wi-Fi mode only (WIFI_MODE 1 in config.h).
+#include "config.h"
+#if WIFI_MODE
+
 #include "web_portal.h"
 #include <WiFi.h>
 #include <WebServer.h>
@@ -115,7 +119,7 @@ static void handleWifiAdd() {
   if (!authed()) return;
   if (!wifiAdd(server.arg("ssid").c_str(), server.arg("pass").c_str()))
     return (void)server.send(400, "text/plain", "Name must be 1-32 characters and password empty or 8-64.");
-  sendCommand(CMD_WIFI_CHANGED);
+  sendNetCommand(CMD_WIFI_CHANGED);
   redirectHome();
 }
 
@@ -216,3 +220,5 @@ void webLoop() {
   ArduinoOTA.handle();
   server.handleClient();
 }
+
+#endif  // WIFI_MODE

@@ -6,7 +6,7 @@ static unsigned long lastRead = 0;
 static int lowReadings = 0;
 
 // Resting LiPo voltage -> charge. Approximate; under Wi-Fi load the voltage sags ~50 mV.
-static const int CURVE_MV[]  = {3450, 3600, 3700, 3750, 3800, 3850, 3900, 4000, 4100, 4200};
+static const int CURVE_MV[]  = {3500, 3600, 3700, 3750, 3800, 3850, 3900, 4000, 4100, 4200};
 static const int CURVE_PCT[] = {   0,    8,   20,   30,   42,   55,   65,   80,   92,  100};
 static const int CURVE_N = sizeof(CURVE_MV) / sizeof(CURVE_MV[0]);
 
@@ -18,6 +18,7 @@ static int readOnceMv() {
 }
 
 void batteryBegin() {
+  if (!BATT_FITTED) return;   // no divider: nothing to read, the icon stays hidden
   pinMode(BATT_PIN, INPUT);
   analogSetPinAttenuation(BATT_PIN, ADC_11db);   // C3 measures up to ~2.5 V at the pin
   smoothedMv = readOnceMv();
@@ -25,7 +26,7 @@ void batteryBegin() {
 }
 
 void batteryUpdate() {
-  if (millis() - lastRead < BATT_READ_MS) return;
+  if (!BATT_FITTED || millis() - lastRead < BATT_READ_MS) return;
   lastRead = millis();
   int mv = readOnceMv();
   // Jumps (plugging USB in or out) are taken straight away, small noise is smoothed.
@@ -34,7 +35,7 @@ void batteryUpdate() {
 }
 
 int  batteryMv()      { return smoothedMv; }
-bool batteryPresent() { return smoothedMv >= BATT_MISSING_MV; }
+bool batteryPresent() { return BATT_FITTED && smoothedMv >= BATT_MISSING_MV; }
 bool batteryOnUsb()   { return smoothedMv >= BATT_USB_MV; }
 bool batteryCritical(){ return lowReadings >= 3; }   // 3 readings in a row, ~15 s
 

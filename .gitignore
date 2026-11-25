@@ -8,3 +8,13 @@ build/
 *.bin
 *.elf
 *.map
+
+# Android app build output and local machine files
+phone-app/.gradle/
+phone-app/**/build/
+phone-app/local.properties
+*.apk
+*.keystore
+*.jks
+# ...except the app's shared signing key, so every build can update the installed app
+!phone-app/app/bagclip-debug.keystore

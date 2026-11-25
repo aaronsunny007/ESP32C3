@@ -1,3 +1,7 @@
+// Wi-Fi mode only (WIFI_MODE 1 in config.h).
+#include "config.h"
+#if WIFI_MODE
+
 #include "spotify.h"
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -5,6 +9,7 @@
 #include <base64.h>
 #include "certs.h"
 #include "settings.h"
+#include "state.h"
 
 #if __has_include("secrets.h")
   #include "secrets.h"
@@ -27,16 +32,6 @@ static void setupTls(WiFiClientSecure &c) {
 #endif
 }
 
-void toDisplayable(const char *in, char *out, size_t outLen) {
-  size_t o = 0;
-  if (!in || outLen == 0) return;
-  for (const unsigned char *p = (const unsigned char *)in; *p && o + 1 < outLen; p++) {
-    if (*p < 0x80) out[o++] = (char)*p;
-    else if ((*p & 0xC0) == 0xC0) out[o++] = '?';   // first byte of a multi-byte character
-    // continuation bytes (10xxxxxx) are skipped
-  }
-  out[o] = 0;
-}
 
 // Only one TLS session at a time: each one needs ~40 KB of RAM, and Bluetooth + Wi-Fi
 // already use a good share of the C3's memory.
@@ -51,6 +46,12 @@ void Spotify::begin() {
 }
 
 bool Spotify::authFailed() { return badKeys; }
+
+// secrets.example.h leaves the keys empty: then Wi-Fi mode is only used for OTA and the web page.
+bool Spotify::configured() {
+  return strlen(SPOTIFY_CLIENT_ID) > 0 && strlen(SPOTIFY_REFRESH_TOKEN) > 0 &&
+         strncmp(SPOTIFY_CLIENT_ID, "YOUR_", 5) != 0;
+}
 
 bool Spotify::refreshToken() {
   closeApi();
@@ -249,3 +250,5 @@ int Spotify::downloadImage(const char *url, uint8_t *buf, size_t cap) {
   otherClient.stop();
   return result;
 }
+
+#endif  // WIFI_MODE

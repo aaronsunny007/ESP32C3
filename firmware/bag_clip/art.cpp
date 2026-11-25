@@ -1,3 +1,7 @@
+// Wi-Fi mode only: in Bluetooth mode the phone app sends a ready-made 1-bit thumbnail.
+#include "config.h"
+#if WIFI_MODE
+
 #include "art.h"
 #include <TJpg_Decoder.h>
 
@@ -65,3 +69,5 @@ bool artConvertJpeg(const uint8_t *jpg, size_t len, uint8_t *out) {
   }
   return true;
 }
+
+#endif  // WIFI_MODE

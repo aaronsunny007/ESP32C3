@@ -1,8 +1,13 @@
-// secrets.example.h
+// secrets.example.h — ONLY needed for Wi-Fi mode (WIFI_MODE 1 in config.h).
+// The default Bluetooth-only firmware doesn't use this file at all.
+//
 // Copy this file to "secrets.h" in the same folder and fill in your values.
 // secrets.h is listed in .gitignore so your keys never get committed.
 //
-// Spotify keys, from https://developer.spotify.com/dashboard :
+// Spotify keys are optional even in Wi-Fi mode. Leave them empty to use Wi-Fi only for
+// over-the-air updates and the settings page (the phone app still sends the song).
+// Fill them in if you want the clip to read Spotify by itself when the app isn't connected.
+// From https://developer.spotify.com/dashboard :
 //   1. Create an app, add redirect URI  http://127.0.0.1:8888/callback
 //   2. Get a refresh token with these scopes (the queue needs the 2nd one):
 //        user-read-currently-playing user-read-playback-state user-modify-playback-state
@@ -10,9 +15,9 @@
 //   3. Paste the client id, secret and refresh token below.
 #pragma once
 
-#define SPOTIFY_CLIENT_ID      "YOUR_SPOTIFY_CLIENT_ID"
-#define SPOTIFY_CLIENT_SECRET  "YOUR_SPOTIFY_CLIENT_SECRET"
-#define SPOTIFY_REFRESH_TOKEN  "YOUR_SPOTIFY_REFRESH_TOKEN"
+#define SPOTIFY_CLIENT_ID      ""
+#define SPOTIFY_CLIENT_SECRET  ""
+#define SPOTIFY_REFRESH_TOKEN  ""
 
 // Two-letter market code used for track lookups (IN = India).
 #define SPOTIFY_MARKET         "IN"

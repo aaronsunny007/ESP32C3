@@ -1,6 +1,8 @@
 # ESP32-C3 Spotify "Now Playing" Bag Clip
 
-A wearable clip that shows the current Spotify song on a small OLED screen, with album art, what's playing next and a battery gauge. Tap once to play/pause, twice to skip, three times to go back. When nothing is playing it shows a panda, dims, and then sleeps (tap to wake). Your phone pairs with it over Bluetooth to set up Wi-Fi and change settings. Runs on a rechargeable LiPo.
+A wearable clip that shows the song playing on your phone on a small OLED screen, with album art, what's playing next and a battery gauge. Tap once to play/pause, twice to skip, three times to go back. When nothing is playing it shows a little animated panda (blinks, waves, eats bamboo, dozes off), dims, and then sleeps (tap to wake). Runs on a rechargeable LiPo.
+
+**Since v3 the clip talks to your phone over Bluetooth only.** No Wi-Fi, no phone hotspot, no Spotify developer keys. A small Android app (`phone-app/`) sends the song to the clip and plays/pauses/skips when you tap the clip. Wi-Fi is still in the firmware as an optional build setting, off by default.
 
 Source of truth for the hardware: *Spotify Bag Clip Complete Guide v6* (in `docs/`). This file summarises it, tracks progress, and records where the firmware differs from the PDF.
 
@@ -9,34 +11,59 @@ Source of truth for the hardware: *Spotify Bag Clip Complete Guide v6* (in `docs
 | Stage | State |
 |---|---|
 | Project file + firmware v1 saved | Done (25 Nov 2026) |
-| Firmware v2 (Bluetooth setup, battery, panda, album art, queue, settings, OTA) | Written 25 Nov 2026. Compiles on GitHub (see "Build check"), **not yet tested on hardware** |
-| Parts ordered (add 2 × 100 kΩ resistors) | To do |
+| Firmware v2 (Bluetooth setup, battery, panda, album art, queue, settings, OTA) | Written 25 Nov 2026, superseded by v3 |
+| Firmware v3: Bluetooth only + Android app (Wi-Fi optional, off) | Written 25 Nov 2026. Firmware and APK build on GitHub (see "Build check"), **not yet tested on hardware or a phone** |
+| Animated idle panda + GIF converter (`tools/gif_to_frames.py`) | Written 25 Nov 2026. Compile checked on GitHub, **not yet seen on a real OLED** |
+| Parts ordered (add 2 × 100 kΩ resistors and a 1N5819 diode) | To do |
 | Pre-flight stage 1: USB & board | To do |
 | Pre-flight stage 2: OLED & touch | To do |
-| Pre-flight stage 3: Bluetooth setup + Spotify sync | To do |
+| Pre-flight stage 3: install app, pair, song shows on the clip | To do |
 | Pre-flight stage 4: touch, dim & sleep | To do |
 | Pre-flight stage 5: battery smoke test + battery level | To do |
 | Enclosure + final assembly | To do |
 
-**Next step:** order parts (plus two 100 kΩ resistors), then compile and flash `firmware/bag_clip` for pre-flight stages 1–2.
+**Next step:** order parts (plus two 100 kΩ resistors and a 1N5819 Schottky diode), then flash `firmware/bag_clip` for pre-flight stages 1–2, and install the Android app from the latest GitHub build for stage 3.
 
-## How Bluetooth and Wi-Fi share the work
+## How the clip talks to your phone (Bluetooth only)
 
-Spotify only talks over the internet, so the clip still needs Wi-Fi (home Wi-Fi or your phone's hotspot) to get songs, album art and the queue. Bluetooth is how your phone talks to the clip itself.
+v2 needed Wi-Fi (usually your phone's hotspot) because the clip asked Spotify's servers for the song itself. A hotspot keeps the phone's Wi-Fi radio and mobile data busy all day, which drains the phone. v3 turns it around: **the phone already knows what's playing, so it tells the clip over Bluetooth Low Energy**, which uses a tiny fraction of the power.
 
-| Job | Bluetooth (phone ↔ clip) | Wi-Fi (clip ↔ internet) |
-|---|---|---|
-| Pairing your phone (6-digit PIN shown on the OLED) | ✓ | |
-| Adding / removing Wi-Fi networks (up to 5) | ✓ | ✓ (web page) |
-| Settings: brightness, dim time, sleep time, scroll speed, album art on/off | ✓ | ✓ (web page) |
-| Play / pause / next / previous from the phone | ✓ (sent on to Spotify over Wi-Fi) | ✓ |
-| Status: battery, Wi-Fi, song | ✓ | ✓ |
-| Now playing, album art, next in queue, playback control | | ✓ |
-| Firmware updates (OTA) | | ✓ |
+```
+ Spotify / YT Music / any player          Bag Clip app (Android)                 Clip (ESP32-C3)
+ ───────────────────────────────          ──────────────────────                 ───────────────
+ media session: title, artist,  ───────►  reads it (notification access) ──BLE──► OLED: song, art,
+ position, cover, queue                   shrinks cover to 32×32 1-bit            progress, next up
+                                ◄───────  play / pause / next / previous ◄──BLE── taps on the pad
+```
 
-Why not Bluetooth only: the clip can't reach Spotify through Bluetooth without a companion app on the phone forwarding the data, and iPhones don't allow that from a web page. Why not Wi-Fi only: the old setup hotspot (WiFiManager) needed you to join a separate network every time you changed Wi-Fi; Bluetooth makes setup a one-tap job and lets you add your phone's hotspot and home Wi-Fi once.
+| Job | How |
+|---|---|
+| Song title, artist, next up, progress, play/pause state | App → clip over BLE, on every change, plus a position re-sync every 30 s while playing (the clip counts along in between) |
+| Album art | App shrinks the cover to a 32×32 black-and-white thumbnail (128 bytes) and sends it once per song |
+| Play / pause / next / previous | Tap the clip → BLE notification → app presses the button on whatever is playing |
+| Settings (brightness, dim, sleep, scroll speed, album art) | App (or the phone page) → clip over BLE |
+| Phone battery % | App → clip, shown on the info screen |
+| Pairing | Once, with the 6-digit PIN shown on the clip. Everything after that is encrypted |
+| Firmware updates | USB cable (or Wi-Fi mode, below) |
 
-Both radios run at the same time (the ESP32-C3 shares one antenna between them). The Bluetooth link is encrypted and needs the PIN on first pairing, so Wi-Fi passwords never travel in the clear and nobody nearby can skip your songs.
+What you gain: no hotspot, no Spotify developer app or keys, no Premium needed for the controls (they go through the Spotify app on your phone, so Free works with its usual skip limits), works with **any** music app, and both the phone and the clip use less battery.
+
+What you give up: the phone needs the Bag Clip app, and it has to be within Bluetooth range (a few metres; fine in a bag).
+
+**Battery on the clip.** With Wi-Fi off the CPU runs at 80 MHz, and after pairing the clip asks for a slow connection (an exchange every 100–150 ms; the clip may skip up to 4 of them when idle). The OLED is now one of the bigger loads. When nothing has played for the sleep time (default 5 min) the clip goes into deep sleep **even if the phone is connected**; tap it and the app reconnects by itself within a second or two. Real numbers still need measuring on the hardware.
+
+### iPhone
+
+**iPhone can't do this.** iOS doesn't let an app read what other apps (Spotify, Apple Music) are playing, and doesn't let it press their buttons, so there is no way to write the companion app for iPhone. (Apple's own protocol for this, AMS, works for Bluetooth accessories, but it's a different design; noted as a possible future step.) On an iPhone the options are Wi-Fi mode with Spotify keys (below), or the v2 firmware from git history.
+
+### Optional Wi-Fi mode (off by default)
+
+Set `WIFI_MODE 1` at the top of `firmware/bag_clip/config.h` to compile Wi-Fi back in. It then:
+- joins a saved Wi-Fi network (added from the phone page over Bluetooth, up to 5),
+- serves the settings page at http://bagclip.local and accepts over-the-air firmware updates,
+- if you fill in Spotify keys in `secrets.h`, reads Spotify directly whenever the phone app isn't connected (the v2 behaviour: album art from Spotify, queue, Premium needed for controls). With the keys left empty, Wi-Fi is only used for OTA and the web page.
+
+Wi-Fi mode needs `secrets.h` (copy `secrets.example.h`; at least change `ADMIN_PASSWORD`) and the ArduinoJson and TJpg_Decoder libraries. It uses a lot more battery on the clip, so turn it on only when you need it.
 
 ## Files
 
@@ -44,32 +71,41 @@ Both radios run at the same time (the ESP32-C3 shares one antenna between them).
 esp32c3/
 ├── README.md                 ← quick start
 ├── PROJECT.md                ← this file
-├── .gitignore                ← keeps secrets.h out of git
-├── .github/workflows/build.yml ← compiles the firmware on every push
+├── .gitignore                ← keeps secrets.h and build output out of git
+├── .github/workflows/build.yml ← builds the firmware (both modes) and the Android app on every push
 ├── docs/
 │   ├── Spotify_Bag_Clip_Complete_Guide_v6.pdf
-│   └── images/panda_preview.png
+│   └── images/panda_idle.gif, panda_idle_preview.gif, panda_poses.png
 ├── firmware/bag_clip/        ← the firmware (one Arduino sketch, several tabs)
-│   ├── bag_clip.ino          ← setup/loop, touch, sleep, network task
-│   ├── config.h              ← pins, timings, defaults  (edit for hardware changes)
-│   ├── secrets.example.h     ← copy to secrets.h: Spotify keys, admin password
+│   ├── bag_clip.ino          ← setup/loop, touch, sleep, sending taps to the phone
+│   ├── config.h              ← pins, timings, defaults, WIFI_MODE switch  (edit for hardware changes)
+│   ├── ble_link.cpp/.h       ← Bluetooth service: song in, taps out, settings, status
+│   ├── ui.cpp/.h             ← every screen, icons, scrolling
+│   ├── panda_anim.h          ← idle-screen animation frames, generated (swap for your own GIF)
+│   ├── battery.cpp/.h        ← battery voltage and %
+│   ├── settings.cpp/.h       ← settings (and Wi-Fi list) stored in flash
+│   ├── state.cpp/.h          ← shared state between tasks
+│   │   — only compiled in Wi-Fi mode —
+│   ├── wifi_link.cpp/.h      ← Wi-Fi connection and the Spotify polling task
 │   ├── spotify.cpp/.h        ← Spotify Web API (now playing, queue, controls, art)
 │   ├── art.cpp/.h            ← album art JPEG → black-and-white thumbnail
-│   ├── ui.cpp/.h             ← every screen, icons, scrolling
-│   ├── panda.h               ← idle-screen panda bitmaps (swap for your own)
-│   ├── battery.cpp/.h        ← battery voltage and %
-│   ├── ble_link.cpp/.h       ← Bluetooth service for the phone
 │   ├── web_portal.cpp/.h     ← settings web page + OTA
-│   ├── settings.cpp/.h       ← settings and Wi-Fi list stored in flash
-│   ├── state.cpp/.h          ← shared state between tasks
-│   └── certs.h               ← root certificates for Spotify's HTTPS
-├── phone/index.html          ← phone setup page (Web Bluetooth)
+│   ├── certs.h               ← root certificates for Spotify's HTTPS
+│   └── secrets.example.h     ← copy to secrets.h (Wi-Fi mode only)
+├── phone-app/                ← the Bag Clip Android app (Kotlin, no extra libraries)
+│   └── app/src/main/java/com/bagclip/app/
+│       ├── MainActivity.kt   ← setup steps, status, clip settings
+│       ├── MediaListener.kt  ← reads what's playing, handles taps from the clip
+│       ├── ClipLink.kt       ← Bluetooth connection to the clip
+│       └── ArtDither.kt      ← cover → 32×32 black-and-white thumbnail
+├── phone/index.html          ← optional settings page in the browser (Web Bluetooth)
 └── tools/
-    ├── png_to_bitmap.py      ← turn any picture into an OLED bitmap
-    └── draw_panda.py         ← how the default panda was drawn
+    ├── gif_to_frames.py      ← turn any GIF into panda_anim.h (the idle animation)
+    ├── png_to_bitmap.py      ← turn a still picture into an OLED bitmap
+    └── draw_panda.py         ← draws the default animated panda (docs/images/panda_idle.gif)
 ```
 
-The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) are replaced by `bag_clip` and remain in git history.
+The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) and the Wi-Fi-first v2 are in git history.
 
 ## Parts (~₹600–₹800, order from Quartz Components or Robu.in)
 
@@ -81,6 +117,7 @@ The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) are replac
 | TP4056 charger | "TP4056 Type-C with protection" | 6 pads (B+, B-, OUT+, OUT-), not the 4-pad unprotected one | 32–55 |
 | LiPo battery | "3.7V 500mAh LiPo battery" | Slim pouch ~30×20×6 mm | 80–150 |
 | Slide switch | "Mini SPDT slide switch 3 pin" | Cuts battery fully | 10–20 |
+| **Schottky diode 1N5819** (or SS14 / SS34 if you're happy with SMD) | "1N5819 Schottky diode" (buy a few) | 1 A, through-hole; the stripe marks the cathode. Stops USB back-feeding the battery (Step B) | 5–10 |
 | **2 × 100 kΩ resistors** | "100K ohm 1/4W resistor" (1% metal film if possible) | For the battery gauge | 5–10 |
 | 100 nF capacitor (optional) | "104 ceramic capacitor" | Steadier battery reading | 2 |
 | Jumper wires | "Female to Female jumper wires 40 pin" | For the no-solder bench test | 40–60 |
@@ -88,10 +125,10 @@ The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) are replac
 
 ## Safety rules (read before wiring)
 
-1. **Battery goes to the 5V pin only.** TP4056 OUT+ (through the switch) → ESP32-C3 **5V**. Never 3.3V: a full LiPo is 4.2 V and will damage the 3.3 V rail.
+1. **Battery goes to the 5V pin only.** TP4056 OUT+ (through the switch and the diode) → ESP32-C3 **5V**. Never 3.3V: a full LiPo is 4.2 V and will damage the 3.3 V rail.
 2. **Never wire the battery straight to GPIO4.** It must go through the two resistors; 4.2 V on a GPIO pin will damage the chip.
 3. **Check the OLED pin labels.** Some print GND, VCC, SCL, SDA and others VCC, GND, SCL, SDA. Wire by the text on *your* board.
-4. **Never dual-power.** Switch OFF before plugging USB-C into either the TP4056 or the ESP32-C3.
+4. **Fit the diode (Step B).** It stops USB on the ESP32 from feeding back into the LiPo. Without it, the switch must be OFF before plugging USB-C into the ESP32-C3. Check the stripe direction before soldering: stripe towards the ESP32.
 
 ## Wiring
 
@@ -105,24 +142,35 @@ The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) are replac
 | GPIO 9 | SCL | — | I2C clock |
 | GPIO 3 | — | I/O (SIG) | Touch input + deep-sleep wake (must be GPIO 0–5) |
 
-Without the battery divider the clip simply hides the battery icon.
+For this bench test leave `BATT_FITTED 0` in `config.h` (the default): with no battery resistors fitted the clip hides the battery icon instead of reading the empty pin as a flat battery.
 
-### Step B: battery and charging (8 solder joints)
+### Step B: battery and charging (10 solder joints)
 
 | From | To | Notes |
 |---|---|---|
 | LiPo red (+) | TP4056 B+ | |
 | LiPo black (−) | TP4056 B− | |
 | TP4056 OUT+ | Switch centre pin | |
-| Switch outer pin | ESP32-C3 **5V** | Feeds the onboard 3.3 V regulator |
+| Switch outer pin | Diode **anode** (the end *without* the stripe) | |
+| Diode **cathode** (the end *with* the stripe) | ESP32-C3 **5V** | Feeds the onboard 3.3 V regulator |
 | TP4056 OUT− | ESP32-C3 GND | |
+
+```
+ LiPo ── TP4056 ── OUT+ ── switch ──┬──►|── ESP32-C3 5V pin ── (USB-C on the ESP32 also lands here)
+                                    │  1N5819
+                                    └── battery divider (Step B2)
+```
+
+**Why the diode:** the ESP32's 5V pin is wired straight to its USB-C socket. Without the diode, plugging a cable into the ESP32 while the switch is on pushes USB's 5 V backwards into the TP4056 output and the LiPo. The Schottky diode only lets current flow from the battery to the board, never back, so it's safe to plug USB into either socket with the switch in any position. Put heat-shrink over it.
+
+The price is ~0.3 V lost across the diode, so the board sees about 3.4 V from a half-empty battery instead of 3.7 V. That's still enough for the regulator; the clip now stops at 3.5 V battery instead of 3.45 V.
 
 ### Step B2: battery level (2 resistors, 4 solder joints)
 
-A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-C3's ADC can read it.
+A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-C3's ADC can read it. It goes on the **battery side of the diode** (the switch's outer pin), so it measures the real battery voltage, not the diode's output or USB.
 
 ```
- ESP32-C3 5V pin (= switch output = battery +)
+ Switch outer pin (= battery + when switched on; same pad as the diode's anode)
         │
       [R1 100 kΩ]
         │
@@ -135,15 +183,20 @@ A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-
 
 | From | To |
 |---|---|
-| ESP32-C3 **5V** pin (same pad as the switch wire) | R1, one leg |
+| Switch outer pin (same pad as the diode's anode) | R1, one leg |
 | R1, other leg | **GPIO 4** and R2, one leg |
 | R2, other leg | ESP32-C3 **GND** |
 
 - Taking it after the switch means the divider draws nothing when the clip is switched off. While on, it draws ~20 µA, which is small next to the clip itself.
-- With USB plugged into the ESP32 (switch off) the 5V pin sits at ~4.7 V, so the screen shows **USB** and a lightning bolt instead of a percentage.
+- Switch off and USB in the ESP32: the divider has no power, so the clip simply hides the battery icon. Switch on and USB in: the board runs from USB (the diode blocks the battery) and the icon shows the battery's charge.
+- **Switch the reading on:** set `BATT_FITTED 1` in `config.h` and flash again. Until then the clip ignores GPIO 4 (no battery icon, no low-battery shutdown).
 - **Calibrate once:** hold the touch pad for 1.5 s to open the info screen, compare "Batt x.xx V" with a multimeter on the battery, and set `BATT_CAL` in `config.h` to *real ÷ shown* (e.g. 4.02 / 3.95 = 1.018).
-- Below ~3.45 V the board's regulator starts to brown out, so the clip shows "Battery low" and sleeps until charged.
+- Below ~3.5 V (battery) the board's regulator starts to brown out after the diode drop, so the clip shows "Battery low / Charge or switch off" and sleeps. **Switch it off** (or charge it): even asleep the board keeps drawing a little, and a flat LiPo left on keeps draining.
 - Using different resistors: set `BATT_DIVIDER` in `config.h` to (R1 + R2) ÷ R2. Keep the pin voltage under 2.5 V.
+
+### Step B3: remove the power LED (recommended)
+
+The SuperMini's red power LED is on whenever the board has power, **including deep sleep**, and draws about 1 mA. That's more than the rest of the sleeping clip and empties a 500 mAh battery in about two weeks of "sleep". Remove it: hold the iron on the LED (or its tiny resistor next to it) for a second and flick it off, or cut its resistor with a craft knife. The blue LED on GPIO 8 is separate and only flickers with OLED traffic. After this, measure the current with a multimeter in series with the switch: asleep it should be well under 1 mA. For storage, always slide the switch off.
 
 ### Step C: sandwich stack
 
@@ -154,58 +207,60 @@ A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-
 
 ## Software setup
 
+### Firmware
+
 **Arduino IDE** (Tools menu):
 - Board: **ESP32C3 Dev Module** (ESP32 core **3.x**)
 - USB CDC On Boot: **Enabled**
-- Partition Scheme: **Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)** — the firmware with Bluetooth + Wi-Fi + HTTPS is too big for the default scheme, and OTA needs two app slots.
+- Partition Scheme: **Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)** (needed for Wi-Fi mode's OTA; harmless otherwise, so keep it for both)
 
 **Libraries** (Library Manager):
 
-| Library | Version |
-|---|---|
-| Adafruit SSD1306 + Adafruit GFX Library | latest |
-| ArduinoJson (Benoit Blanchon) | **7.x** |
-| NimBLE-Arduino (h2zero) | **2.x** |
-| TJpg_Decoder (Bodmer) | latest (1.1.x) |
-
-SpotifyArduino and WiFiManager are **no longer needed**: the firmware has its own small Spotify client (it needs the queue, which SpotifyArduino doesn't support) and Bluetooth replaces the Wi-Fi setup portal.
-
-**Spotify keys:**
-1. Create an app at developer.spotify.com/dashboard. Add redirect URI `http://127.0.0.1:8888/callback` (Spotify no longer accepts `localhost`).
-2. Get a refresh token with scopes **`user-read-currently-playing user-read-playback-state user-modify-playback-state`**. The middle one is new in v2 (for "next in queue"); if you made a token for v1, make a new one. SpotifyArduino's `getRefreshToken` example still works for this step (install it just for that, or use any Spotify OAuth helper).
-3. Copy `firmware/bag_clip/secrets.example.h` to `secrets.h`, paste the client ID, secret and refresh token, and **change `ADMIN_PASSWORD`**. `secrets.h` is gitignored.
-
-Play/pause and skip need **Spotify Premium** (Spotify's rule). Without it the clip shows "Needs Spotify Premium" when you tap; the now-playing display works on Free.
-
-### First run: pair your phone
-
-1. Flash the firmware. The OLED says **Set me up!** (no Wi-Fi saved yet).
-2. On your phone, open the setup page (see below) and tap **Connect**, pick **BagClip**.
-3. Your phone asks for a PIN: type the 6 digits shown on the clip. This happens once; the phone is remembered after that.
-4. Under **Wi-Fi networks**, add your phone's hotspot and your home Wi-Fi. The clip joins the strongest one in range, and switches automatically when you move.
-5. Play a song on Spotify. Title, artist, album art and "next up" appear within a few seconds.
-
-**The phone page** is `phone/index.html` and uses Web Bluetooth:
-- **Android:** Chrome. **Laptop:** Chrome or Edge. **iPhone:** the free *Bluefy* browser (Safari has no Web Bluetooth).
-- Browsers only allow Bluetooth on `https://` pages. Easiest: on GitHub, Settings → Pages → deploy from branch `main` (or the default branch), folder `/ (root)`, then open `https://<your-user>.github.io/esp32c3/phone/`. GitHub Pages on a private repo needs a paid plan; otherwise copy the file to any free static host.
-- **No-page fallback:** the *nRF Connect* app (Android and iPhone). Connect to BagClip, open the service starting `b4c1a000`, and write UTF-8 text to:
-
-| Characteristic | Write | Read |
+| Library | Version | Needed for |
 |---|---|---|
-| `b4c1a001…` Wi-Fi | `add` ⏎ `SSID` ⏎ `password` (newline-separated), or `del` ⏎ `SSID` | saved network names |
-| `b4c1a002…` Settings | `brightness=200;dim=8;sleep=5;scroll=3;art=1` (any subset) | current settings |
-| `b4c1a003…` Control | `toggle`, `play`, `pause`, `next`, `prev`, `refresh` | — |
-| `b4c1a004…` Status | — | `bat=`, `wifi=`, `ip=`, `title=` … lines (also notifies) |
+| Adafruit SSD1306 + Adafruit GFX Library | latest | always |
+| NimBLE-Arduino (h2zero) | **2.x** | always |
+| ArduinoJson (Benoit Blanchon) | **7.x** | Wi-Fi mode only |
+| TJpg_Decoder (Bodmer) | latest (1.1.x) | Wi-Fi mode only |
 
-### Settings web page and OTA updates (over Wi-Fi)
+The default Bluetooth-only build needs **no `secrets.h`**, no Spotify keys and no passwords. Just open `firmware/bag_clip/bag_clip.ino` and upload.
 
-Once on Wi-Fi, the clip serves a page at **http://bagclip.local** (or the IP from the info screen: hold the pad 1.5 s). Log in as `admin` with your `ADMIN_PASSWORD`. It has the same settings and Wi-Fi list as the phone page, play buttons, and a firmware upload box.
+### Phone app (Android 8 or newer)
 
-Two ways to update firmware without a cable:
-- **Arduino IDE:** with your computer on the same Wi-Fi, pick **Tools → Port → bagclip at 192.168.x.x** and upload as usual. It asks for `ADMIN_PASSWORD`.
-- **Browser:** Sketch → Export Compiled Binary, then upload `bag_clip.ino.bin` on the web page. Each GitHub build also attaches the `.bin` as an artifact.
+1. **Get the APK.** On GitHub open **Actions → Build firmware and app**, click the latest green run, and download **bag-clip-app** at the bottom (a zip with `app-debug.apk` inside). Or build it yourself: open `phone-app/` in Android Studio and press Run.
+2. **Install it.** Copy the APK to the phone and open it. Android asks to allow installing from that app (Files / Chrome): allow it. Play Protect may warn that it's an unknown app; choose *Install anyway*. **Updating later:** every build is signed with the same key (`phone-app/app/bagclip-debug.keystore`), so a newer APK installs straight over the old one and keeps all the permissions below. No uninstall needed.
+3. **Open Bag Clip** and do the three steps on its screen:
+   1. **Allow Bluetooth** (Android asks for "Nearby devices").
+   2. **Allow reading what's playing**: switch on *Bag Clip* in the *Notification access* list. Android calls it that because media info comes through the same door; the app ignores your notifications' content. **Android 13+:** for apps installed from a file this switch is greyed out at first. Go to *Settings → Apps → Bag Clip → ⋮ (top right) → Allow restricted settings*, then switch it on.
+   3. **Find my clip**: tap the clip to wake it, tap the button, and type the **6-digit PIN** the clip shows when your phone asks. (Android 8–11: switch **Location** on in quick settings while searching; those versions only find Bluetooth devices with Location on.)
+4. Optional but recommended: **Let it run in the background** → set Bag Clip to *Unrestricted*. Xiaomi/Redmi/POCO, Oppo/Realme, Vivo and some Samsung phones kill background apps aggressively; on Xiaomi also enable *Autostart*.
+5. Play a song in any app. Title, artist, album art and progress appear on the clip within a second or so.
 
-The clip shows a progress bar and restarts when done. Settings and saved Wi-Fi survive updates.
+The app keeps running in the background on its own (Android keeps apps with notification access alive), reconnects whenever the clip wakes up, and follows whichever app is playing.
+
+### Bluetooth protocol (for nRF Connect or your own app)
+
+Service `b4c1a000-6f1a-4a8e-9c3e-2f5d7a0e1c00`. All characteristics need the PIN pairing first (plain "Just Works" pairing is refused), and a connection that hasn't paired within 45 s is dropped. Text is UTF-8.
+
+| Characteristic | Direction | Format |
+|---|---|---|
+| `b4c1a002…` Settings | read / write | `brightness=200;dim=8;sleep=5;scroll=3;art=1` (any subset) |
+| `b4c1a003…` Control | phone → clip | `toggle`, `play`, `pause`, `next`, `prev`, `refresh` (the clip passes them on to the app) |
+| `b4c1a004…` Status | read / notify | `fw=`, `mode=`, `bat=`, `mv=`, `usb=`, `app=`, `playing=`, `title=` … lines |
+| `b4c1a005…` Now playing | phone → clip | newline-separated `key=value`, any subset: `title`, `artist`, `next`, `dur` (ms, 0 = unknown length), `pos` (ms), `play` (1/0), `app`, `pbat` (%), or `clear=1` for nothing playing. Up to 512 bytes |
+| `b4c1a006…` Album art | phone → clip | exactly 128 bytes: 32×32, 1 bit per pixel, rows top to bottom, MSB = leftmost, 1 = lit. An empty write (0 bytes) clears the art; longer writes are rejected |
+| `b4c1a007…` Buttons | clip → phone (notify) | `toggle`, `next`, `prev`, `refresh` when the pad is tapped. Subscribing marks the app as linked |
+| `b4c1a001…` Wi-Fi | read / write | Wi-Fi mode only: `add` ⏎ `SSID` ⏎ `password`, or `del` ⏎ `SSID` |
+
+### Browser settings page (optional)
+
+`phone/index.html` uses Web Bluetooth (Chrome on Android or a laptop) to show the clip's status and change settings, and in Wi-Fi mode to add Wi-Fi networks. Browsers only allow Bluetooth on `https://` pages, e.g. GitHub Pages. The app does the same job, so you only need this on a laptop or in Wi-Fi mode.
+
+### Wi-Fi mode extras: web page and OTA updates
+
+Only with `WIFI_MODE 1`. Once on Wi-Fi the clip serves **http://bagclip.local** (log in as `admin` with `ADMIN_PASSWORD`) with settings, the Wi-Fi list, play buttons and a firmware upload box. Arduino IDE can also upload over the air (**Tools → Port → bagclip at 192.168.x.x**). GitHub builds attach both `.bin` files (`bag_clip-firmware-ble` and `-wifi`).
+
+To read Spotify directly (no app connected), fill in `secrets.h`: create an app at developer.spotify.com/dashboard with redirect URI `http://127.0.0.1:8888/callback`, get a refresh token with scopes `user-read-currently-playing user-read-playback-state user-modify-playback-state`, and paste the client ID, secret and token. Controls then need Spotify Premium.
 
 ### Settings
 
@@ -213,68 +268,100 @@ The clip shows a progress bar and restarts when done. Settings and saved Wi-Fi s
 |---|---|---|---|
 | Brightness | 200 | 1–255 | OLED contrast |
 | Dim after | 8 s | 0–3600 (0 = never) | Dims the panda screen when nothing has happened for this long |
-| Sleep after | 5 min | 0–240 (0 = never) | Deep sleep when nothing is playing. Never sleeps while the phone is connected |
+| Sleep after | 5 min | 0–240 (0 = never) | Deep sleep when nothing is playing, even while the phone is connected. Tap to wake; the app reconnects by itself |
 | Scroll speed | 3 | 1–5 | Long titles scroll at 12 / 20 / 30 / 42 / 60 pixels per second |
 | Album art | on | on/off | 32×32 black-and-white thumbnail |
 
-Defaults live in `config.h`; changes from the phone or web page are saved in flash.
+Defaults live in `config.h`; changes from the app, the phone page or the web page are saved in flash.
 
-### Swapping the panda
+### The idle panda animation
 
-The idle screen draws `PANDA_OPEN` and, for a quick blink every 4 s, `PANDA_BLINK` from `firmware/bag_clip/panda.h` (64×64, 1 bit per pixel, lit pixels = white).
+When nothing is playing, the left half of the screen shows a 64×64 panda that loops through a ~16 s routine: looks around and blinks, waves, eats a stick of bamboo, then dozes off with floating z's. The text on the right ("Nothing playing", "Paused", ...) stays as before.
 
-![panda preview](docs/images/panda_preview.png)
+![panda animation, 4x size](docs/images/panda_idle_preview.gif)
 
-To use your own picture (`pip install pillow` first):
+![the 11 pictures](docs/images/panda_poses.png)
+
+How it runs on the clip:
+
+- **Pictures in flash, not RAM.** `firmware/bag_clip/panda_anim.h` holds each different picture once (11 × 512 bytes = 5.6 KB of flash) plus a play list of (picture, milliseconds). Repeats like "blink, open, blink" reuse the same picture. RAM use is 2 variables.
+- **Non-blocking.** No `delay()`: each pass of `loop()` checks whether the current step's time is up. The screen is only redrawn when the picture actually changes (at most ~5 times a second, during the wave) or once a second for the battery/status text, so Bluetooth and the touch pad are as responsive as before and the I²C bus is idle most of the time.
+- **Dims and stops.** After the *Dim after* time (default 8 s) the screen dims and the animation freezes on the dozing "zzz" picture, redrawing only every 5 s. Any tap or new song wakes it up and the routine starts again. Deep sleep after the *Sleep after* time is unchanged.
+
+### Your own animation
+
+Any animated GIF works (`pip install pillow` first):
 
 ```
-python3 tools/png_to_bitmap.py my_pic.png PANDA_OPEN  > open.h
-python3 tools/png_to_bitmap.py my_pic_blink.png PANDA_BLINK > blink.h
+python3 tools/gif_to_frames.py my.gif --preview check.gif
 ```
 
-Paste each array over the one in `panda.h` (keep the `PANDA_W` / `PANDA_H` lines at the bottom). For one picture with no blink, convert it twice under both names. Draw white on black, or add `--invert` for a black-on-white drawing and `--dither` for photos. The online tool *image2cpp* also works: 64×64, "Horizontal – 1 bit per pixel", Arduino code output.
+That overwrites `firmware/bag_clip/panda_anim.h`; flash the sketch again and it plays. Open `check.gif` first to see exactly what the OLED will show (4× size). The script:
+
+- shrinks the GIF to fit 64×64 (keeps its shape, centred on black) and keeps each frame's own timing;
+- lights up the **bright** parts. For a dark drawing on a white background add `--invert`; for photos or shaded art add `--dither`; if it looks too thin or too blobby, try `--threshold 80` or `--threshold 160`;
+- keeps at most 24 different pictures (`--max-frames`, 512 bytes each) so a long GIF doesn't fill the flash; it picks them evenly and stretches their timing;
+- `--speed 0.5` plays it at half speed, `--rest N` picks the step that's frozen on screen while dimmed (default the first; the default panda uses `--rest 25`, the zzz picture).
+
+Simple, high-contrast GIFs with a plain background look best: on a 1-bit 64×64 screen, cartoon outlines read well and detailed photos turn to noise. To change the default panda itself, edit `tools/draw_panda.py`, then run it and the converter:
+
+```
+python3 tools/draw_panda.py
+python3 tools/gif_to_frames.py docs/images/panda_idle.gif --rest 25
+```
 
 ## Screens
 
 | Screen | When |
 |---|---|
-| Now playing | Status bar (play/pause icon, Wi-Fi bars, Bluetooth icon when the phone is connected, battery % or USB), album art on the left, title / artist / ► next-up scrolling on the right, elapsed and total time, progress bar |
+| Now playing | Status bar (play/pause icon, Bluetooth icon with an x when the phone isn't connected, battery %), album art on the left, title / artist / ► next-up scrolling on the right, elapsed and total time, progress bar |
 | Paused | Same as now playing with a pause icon for 10 s, then the panda |
-| Panda (idle) | Nothing playing: blinking panda, "Nothing playing", Wi-Fi and battery. Dims after the dim time, sleeps after the sleep time |
-| Set me up! | No Wi-Fi saved yet: pair your phone |
+| Panda (idle) | Animated panda with "Nothing playing", "Paused", "Phone not connected" or "Open the Bag Clip app". Dims after the dim time, sleeps after the sleep time |
+| Set me up! | Never paired: open the app and tap Find my clip |
 | Bluetooth PIN | While your phone pairs |
-| Info | Hold the pad 1.5 s: version, Wi-Fi name and IP, battery voltage, last Spotify status |
-| Updating firmware | During OTA, with a progress bar |
-| Messages | Short pop-ups: "Next", "Needs Spotify Premium", "No active device" |
+| Info | Hold the pad 1.5 s: version, phone link, which app is playing, phone battery, clip battery voltage |
+| Messages | Short pop-ups: "Next", "Previous", "Phone not connected", "Open the Bag Clip app" |
+| Wi-Fi mode only | Connecting / no Wi-Fi / Spotify error screens, OTA progress bar |
 
 ## Pre-flight checklist (do in order, before closing the case)
 
 - [ ] **1. USB & board:** plug in, select ESP32C3 Dev Module + USB CDC On Boot Enabled + Minimal SPIFFS partition, upload a blink/serial test. COM port shows up, upload clean.
-- [ ] **2. OLED & touch:** jumper-wire OLED + TTP223, flash `bag_clip`. OLED shows "Bag Clip v2.0.0" then "Set me up!"; TTP223 LED lights when touched; holding it 1.5 s shows the info screen.
-- [ ] **3. Bluetooth + Spotify:** pair from the phone page (PIN on the OLED), add your hotspot, play a song. Title, artist, album art, next-up and times within ~5 s; long titles scroll smoothly. http://bagclip.local opens.
-- [ ] **4. Touch, dim & sleep:** 1 tap pauses/plays, 2 taps skip, 3 taps go back. Pause: panda after 10 s, dims after 8 s more, sleeps after 5 min. Tap → wakes.
-- [ ] **5. Battery:** USB unplugged, solder LiPo + TP4056 + switch + the two resistors, switch ON. Nothing warm, boots on battery, battery % shows; calibrate `BATT_CAL` against a multimeter. TP4056 LED red while charging / blue when full.
+- [ ] **2. OLED & touch:** jumper-wire OLED + TTP223, flash `bag_clip` (with `BATT_FITTED 0`, the default). OLED shows "Bag Clip v3.0.1" then "Set me up!"; TTP223 LED lights when touched; holding it 1.5 s shows the info screen.
+- [ ] **3. App + Bluetooth:** install the app, do its three steps (PIN on the OLED), play a song in Spotify. Title, artist, album art and times within ~1 s; long titles scroll smoothly. Turn the phone screen off: the clip keeps updating. Hotspot and Wi-Fi can stay off.
+- [ ] **4. Touch, dim & sleep:** 1 tap pauses/plays, 2 taps skip, 3 taps go back (on the phone, within ~0.5 s). Pause: animated panda after 10 s (blinks, waves, eats bamboo, smooth with no stutter), dims and freezes on the "zzz" picture after 8 s more, sleeps after 5 min. A tap while dimmed restarts the animation at full brightness. Tap → wakes, and the app reconnects within a few seconds.
+- [ ] **5. Battery:** USB unplugged, solder LiPo + TP4056 + switch + diode (stripe towards the ESP32) + the two resistors, remove the power LED (Step B3), set `BATT_FITTED 1` and flash, switch ON. Nothing warm, boots on battery, battery % shows; calibrate `BATT_CAL` against a multimeter. TP4056 LED red while charging / blue when full. Then plug USB into the ESP32 with the switch ON: the clip keeps running and nothing gets warm (the diode is doing its job).
 
 ## Build check
 
-There is no Arduino toolchain in the cloud workspace, so `.github/workflows/build.yml` compiles the sketch on GitHub for every push (ESP32 core 3.1.1, NimBLE-Arduino 2.1.0, ArduinoJson 7.2.1, TJpg_Decoder 1.1.0, Minimal SPIFFS partition) and attaches the `.bin`. A green check means it compiles; it doesn't test behaviour on real hardware.
+There is no Arduino or Android toolchain in the cloud workspace, so `.github/workflows/build.yml` does it on GitHub for every push:
+- **Firmware**, twice: the default Bluetooth-only build and the Wi-Fi mode build (ESP32 core 3.1.1, NimBLE-Arduino 2.1.0, ArduinoJson 7.2.1, TJpg_Decoder 1.1.0, Minimal SPIFFS partition). Each `.bin` is attached.
+- **Android app**: `gradle assembleDebug` (Android Gradle Plugin 8.7, Kotlin 2.0, compileSdk 35, minSdk 26). The debug-signed APK is attached as `bag-clip-app`.
 
-## Firmware notes (v2)
+A green check means it compiles; it doesn't test behaviour on real hardware or a real phone.
 
-- **No more frozen screen during network calls.** Spotify requests run in their own FreeRTOS task, so scrolling and touch stay smooth while HTTPS calls are in flight. Taps are queued to that task, which also fixes the v1 issue of a poll swallowing a double-tap.
-- **Smoother scrolling:** time-based (constant speed regardless of frame time), 1-pixel steps, a 1.5 s pause at the start, and a seamless wrap-around instead of jumping back.
-- **Keep-alive to api.spotify.com** avoids a full TLS handshake on every poll (faster, less battery). Album art, queue and token calls use a second short-lived connection, closed before the next one opens to save RAM.
-- **Album art:** Spotify's smallest cover (64×64 JPEG, ~3 KB) is decoded at half size and Floyd–Steinberg dithered with automatic contrast stretch.
-- **Next in queue** is fetched when the song changes and every 2 min while playing (the reply is large, so it isn't polled every few seconds).
-- **Refresh token rotation:** if Spotify hands out a new refresh token it is saved in flash and used until you paste a different one into `secrets.h`.
-- Carried over from v1: `WIFI_POWER_8_5dBm` TX power fix for SuperMini boards, sleep instead of reboot-looping when Wi-Fi is missing, wait for the finger to lift before sleeping, poll failures count as "not playing" so it can still sleep, non-ASCII characters shown as `?`, interpolated progress bar, Spotify login errors on screen.
+## Firmware notes (v3)
+
+- **Bluetooth only by default.** All Wi-Fi, HTTPS, Spotify, JPEG and web-server code is compiled out unless `WIFI_MODE 1`, which also frees a lot of RAM and flash.
+- **Taps go to the phone.** The clip sends `toggle`/`next`/`prev` as a BLE notification; the app calls play/pause/skip on the active media session (or sends a media key if no player is open, which resumes the last one). The play icon flips immediately and the phone's next update confirms it.
+- **Progress bar** is interpolated on the clip between updates; the app re-syncs the position on every play/pause/seek and every 30 s.
+- **Album art** is dithered on the phone (same Floyd–Steinberg + contrast stretch as v2's on-clip decoder), so the clip just copies 128 bytes.
+- **Text:** the app strips accents ("Beyoncé" → "Beyonce") and turns other non-ASCII characters into `?`, since the OLED font is ASCII only.
+- **Low power:** 80 MHz CPU, slow BLE connection parameters after pairing, slower advertising (every 250–500 ms) while waiting for the phone, deep sleep after the sleep time even while connected. The app doesn't request its own connection speed, so the clip's slow setting stays in force.
+- **Pairing:** LE Secure Connections with a random 6-digit PIN on the OLED. Every characteristic needs a PIN-paired link; pairing without the PIN is refused, and a connection that hasn't paired within 45 s is dropped (the clip keeps advertising until your phone is paired, so a stray device can't lock it out). Nobody nearby can see what you play or skip your songs.
+- **Stuck pad:** if the pad is still pressed when the clip goes to sleep (squashed in the bag), it checks again every minute with the screen off instead of waking over and over.
+- Carried over from v2: smooth time-based scrolling, tap queue, battery gauge and calibration, panda idle screen (now animated), settings in flash, sleep/wake on the touch pad, low-battery shutdown.
 
 ## Known risks / open questions
 
-- **Not tested on hardware yet.** Library APIs (NimBLE-Arduino 2.x, ESP32 core 3.x) are pinned in the build check; older versions (NimBLE 1.x, core 2.x) won't compile.
-- **Memory:** Bluetooth + Wi-Fi + HTTPS together use a lot of the C3's 400 KB RAM. The firmware keeps only one HTTPS connection open at a time. If you see resets with "alloc failed" on the serial monitor, turn album art off first.
-- **Spotify certificates:** `certs.h` bundles 7 common root CAs. If every request fails with a TLS error, set `SPOTIFY_TLS_INSECURE 1` in `secrets.h` for a bench test and report it.
-- **Battery icon accuracy:** voltage-based, ±10 %. It reads a bit low during Wi-Fi activity and a bit high while charging.
+- **Not tested on hardware or a phone yet.** Library APIs (NimBLE-Arduino 2.x, ESP32 core 3.x) are pinned in the build check; older versions (NimBLE 1.x, core 2.x) won't compile.
+- **Android only** for the Bluetooth-only mode (see "iPhone" above).
+- **Background killing:** some Android skins stop background apps despite notification access. If the clip stops updating with the phone screen off, set the app's battery use to *Unrestricted* (and *Autostart* on Xiaomi). If Android does unbind the app's listener, it asks to be reconnected straight away, and again whenever you open the app.
+- **Sideloaded app on Android 13+** needs *Allow restricted settings* before notification access can be switched on (see the app setup steps).
+- **Next up** only shows when the playing app shares its queue with Android. Many apps do; Spotify may or may not depending on version. Everything else works without it.
+- **Pairing a second phone / a new phone:** remove *BagClip* from the old phone's Bluetooth list and pair again from the new one. The clip keeps up to a few bonds.
+- **Memory (Wi-Fi mode):** Bluetooth + Wi-Fi + HTTPS together use a lot of the C3's 400 KB RAM. The firmware keeps only one HTTPS connection open at a time. If you see resets with "alloc failed" on the serial monitor, turn album art off first.
+- **Spotify certificates (Wi-Fi mode):** `certs.h` bundles 7 common root CAs. If every request fails with a TLS error, set `SPOTIFY_TLS_INSECURE 1` in `secrets.h` for a bench test and report it.
+- **Battery icon accuracy:** voltage-based, ±10 %. It reads a bit low under load (Wi-Fi mode especially) and a bit high while charging.
 - **GPIO 8 is the SuperMini's onboard LED and a boot strapping pin.** With the OLED's pull-ups it boots fine; the LED may flicker with I2C traffic. GPIO 9 is the BOOT button, so don't hold it while powering on.
-- **Battery into the 5V pin:** the onboard regulator needs ~3.4 V+ input, so the last ~10 % of the LiPo isn't usable (the clip sleeps at 3.45 V).
-- **Bluetooth power:** advertising adds a little drain while awake; it stops completely in deep sleep.
+- **Battery into the 5V pin through a diode:** the onboard regulator needs ~3.2 V+ at the 5V pin and the diode drops ~0.3 V, so the last ~10–15 % of the LiPo isn't usable (the clip sleeps at 3.5 V battery). An "ideal diode" chip would lose almost nothing, but needs SMD soldering.
+- **Bluetooth power:** advertising and the slow connection add a little drain while awake; both stop completely in deep sleep. Automatic light sleep between radio events would save more but isn't enabled in the stock Arduino core; a possible later improvement.

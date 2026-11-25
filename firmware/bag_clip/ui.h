@@ -19,5 +19,8 @@ bool uiBegin();
 void uiSetContrast(uint8_t contrast);
 void uiOff();
 void uiMessage(const char *line1, const char *line2 = nullptr, const char *line3 = nullptr);
+// Idle panda: true freezes the animation on its resting picture (screen dimmed),
+// false restarts it from the beginning.
+void uiPandaRest(bool rest);
 // Draws the screen if a new frame is due (frame rate is capped inside).
 void uiRender(Screen screen, const AppState &st, bool force = false);
