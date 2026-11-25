@@ -14,7 +14,7 @@ Source of truth for the hardware: *Spotify Bag Clip Complete Guide v6* (in `docs
 | Firmware v2 (Bluetooth setup, battery, panda, album art, queue, settings, OTA) | Written 25 Nov 2026, superseded by v3 |
 | Firmware v3: Bluetooth only + Android app (Wi-Fi optional, off) | Written 25 Nov 2026. Firmware and APK build on GitHub (see "Build check"), **not yet tested on hardware or a phone** |
 | Animated idle panda + GIF converter (`tools/gif_to_frames.py`) | Written 25 Nov 2026. Compile checked on GitHub, **not yet seen on a real OLED** |
-| Parts ordered (add 2 × 100 kΩ resistors and a 1N5819 diode) | To do |
+| Parts ordered | Main parts ordered 24–25 Nov 2026 (see "Parts"). **Still to buy:** 1N5819 diode, 2 × 100 kΩ resistors, jumper wires, badge clip, foam tape |
 | Pre-flight stage 1: USB & board | To do |
 | Pre-flight stage 2: OLED & touch | To do |
 | Pre-flight stage 3: install app, pair, song shows on the clip | To do |
@@ -22,7 +22,7 @@ Source of truth for the hardware: *Spotify Bag Clip Complete Guide v6* (in `docs
 | Pre-flight stage 5: battery smoke test + battery level | To do |
 | Enclosure + final assembly | To do |
 
-**Next step:** order parts (plus two 100 kΩ resistors and a 1N5819 Schottky diode), then flash `firmware/bag_clip` for pre-flight stages 1–2, and install the Android app from the latest GitHub build for stage 3.
+**Next step:** buy the missing parts (diode, resistors, jumper wires, clip, foam tape; see "Parts → Still to buy"). Meanwhile, install the Android app from the latest GitHub build on the Pixel and check it still shows the song after an hour with the phone locked. When the parts arrive, solder the SuperMini's headers and flash `firmware/bag_clip` for pre-flight stages 1–2.
 
 ## How the clip talks to your phone (Bluetooth only)
 
@@ -107,21 +107,38 @@ esp32c3/
 
 The two v1 sketches (`spotify_bag_clip_wifi`, `spotify_bag_clip_ble`) and the Wi-Fi-first v2 are in git history.
 
-## Parts (~₹600–₹800, order from Quartz Components or Robu.in)
+## Parts
 
-| Part | Search for | Check before buying | ₹ |
+### Ordered (24–25 Nov 2026, not yet delivered)
+
+| Part | What was ordered | ₹ | Check when it arrives |
 |---|---|---|---|
-| ESP32-C3 SuperMini | "ESP32-C3 SuperMini with soldered headers" | Headers pre-soldered | 248–299 |
-| 0.96" OLED | "0.96 inch I2C OLED 4 pin SSD1306" | 4-pin I2C (GND, VCC, SCL, SDA), not 7-pin SPI. Yellow/blue looks best | 144–199 |
-| TTP223 touch sensor | "TTP223 capacitive touch sensor module" | 3 pins (VCC, GND, I/O) | 15–30 |
-| TP4056 charger | "TP4056 Type-C with protection" | 6 pads (B+, B-, OUT+, OUT-), not the 4-pad unprotected one | 32–55 |
-| LiPo battery | "3.7V 500mAh LiPo battery" | Slim pouch ~30×20×6 mm | 80–150 |
-| Slide switch | "Mini SPDT slide switch 3 pin" | Cuts battery fully | 10–20 |
-| **Schottky diode 1N5819** (or SS14 / SS34 if you're happy with SMD) | "1N5819 Schottky diode" (buy a few) | 1 A, through-hole; the stripe marks the cathode. Stops USB back-feeding the battery (Step B) | 5–10 |
-| **2 × 100 kΩ resistors** | "100K ohm 1/4W resistor" (1% metal film if possible) | For the battery gauge | 5–10 |
-| 100 nF capacitor (optional) | "104 ceramic capacitor" | Steadier battery reading | 2 |
-| Jumper wires | "Female to Female jumper wires 40 pin" | For the no-solder bench test | 40–60 |
-| Tools + clip | 25W soldering iron kit, metal alligator badge clip | Solder, flux, heat-shrink, foam tape | 180–300 |
+| ESP32-C3 SuperMini | ESP32-C3 Super Mini Development Board, HW-466AB | 248 | The pin headers come loose: solder them on (short side into the board) before the jumper-wire bench test |
+| 0.96" OLED | OLED Display 0.96 inch I2C / 4 pin, blue, SSD1306 | 144 | 4-pin I2C. Wire by the pin labels printed on *your* board (GND/VCC order varies). Shows everything in blue |
+| TTP223 touch sensor | Red TTP223 1-channel capacitive touch sensor module | 9 | Leave the **A** and **B** solder pads open (the default). Bridging them changes the output mode and breaks tap detection and wake-from-sleep |
+| TP4056 charger | TP4056 battery charging protection module (Type-C) | 18 | Must have **6 pads** (B+, B−, OUT+, OUT− plus USB). A 4-pad board has no battery protection: don't use it with the LiPo |
+| LiPo battery | 3.7 V 450 mAh Li-Po, 602040 | 177 | 602040 = about 6 × 20 × 40 mm: 10 mm longer than planned and longer than the OLED board (~27 mm), so the case gets a little longer or the cell sits under the ESP32. Runtime about the same as 500 mAh |
+| Slide switch | SPDT miniature slide switch | 6 | 3 pins |
+| Heat-shrink | Heat shrink sleeve tube, 4 mm, black, 1 m | 15 | |
+| Soldering kit | Walkers Beginners 10-in-1 mobile soldering kit | 251 | Check it has solder wire and flux; if there's no flux, buy a small tin of flux paste |
+
+Ordered so far: **₹868**.
+
+### Still to buy
+
+| Part | Search for | Qty | Why | ₹ |
+|---|---|---|---|---|
+| **Schottky diode 1N5819** (or SS14 / SS34 if you're happy with SMD) | "1N5819 Schottky diode" | pack of 5–10 | Stops USB on the ESP32 back-feeding the battery (Step B). 1 A, through-hole; the stripe marks the cathode | 5–10 |
+| **2 × 100 kΩ resistors** | "100K ohm 1/4W resistor" (1% metal film if possible) | 2 (a pack) | Battery level reading (Step B2) | 5–10 |
+| Jumper wires | "Female to Female jumper wires 40 pin" | 1 set | No-solder bench test (Step A) | 40–60 |
+| Badge clip | "metal alligator badge clip" | 1 | Attaches the clip to the bag | 10–30 |
+| Double-sided foam tape | "double sided foam tape" | 1 | Holds the sandwich stack together (Step C) | 20–50 |
+| Kapton or electrical tape | "kapton tape" / "electrical insulation tape" | 1 | Wraps the LiPo (skip if the soldering kit has tape) | 20–60 |
+| Flux paste | "soldering flux paste" | 1 | Only if the soldering kit has none | 30–60 |
+| 100 nF capacitor (optional) | "104 ceramic capacitor" | 1 | Steadier battery reading | 2 |
+| Multimeter (optional, recommended) | "digital multimeter DT830" | 1 | Battery calibration (`BATT_CAL`) and checking sleep current after removing the power LED (Step B3) | 150–250 |
+
+Stages 1–2 of the pre-flight checklist only need the board, OLED, touch sensor and jumper wires. The diode and resistors aren't needed until stage 5.
 
 ## Safety rules (read before wiring)
 
@@ -196,7 +213,7 @@ A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-
 
 ### Step B3: remove the power LED (recommended)
 
-The SuperMini's red power LED is on whenever the board has power, **including deep sleep**, and draws about 1 mA. That's more than the rest of the sleeping clip and empties a 500 mAh battery in about two weeks of "sleep". Remove it: hold the iron on the LED (or its tiny resistor next to it) for a second and flick it off, or cut its resistor with a craft knife. The blue LED on GPIO 8 is separate and only flickers with OLED traffic. After this, measure the current with a multimeter in series with the switch: asleep it should be well under 1 mA. For storage, always slide the switch off.
+The SuperMini's red power LED is on whenever the board has power, **including deep sleep**, and draws about 1 mA. That's more than the rest of the sleeping clip and empties the 450 mAh battery in about two weeks of "sleep". Remove it: hold the iron on the LED (or its tiny resistor next to it) for a second and flick it off, or cut its resistor with a craft knife. The blue LED on GPIO 8 is separate and only flickers with OLED traffic. After this, measure the current with a multimeter in series with the switch: asleep it should be well under 1 mA. For storage, always slide the switch off.
 
 ### Step C: sandwich stack
 
@@ -226,6 +243,8 @@ The SuperMini's red power LED is on whenever the board has power, **including de
 The default Bluetooth-only build needs **no `secrets.h`**, no Spotify keys and no passwords. Just open `firmware/bag_clip/bag_clip.ino` and upload.
 
 ### Phone app (Android 8 or newer)
+
+Your phone: **Google Pixel** (stock Android 13+). No background-killer settings needed; do the *Allow restricted settings* step below.
 
 1. **Get the APK.** On GitHub open **Actions → Build firmware and app**, click the latest green run, and download **bag-clip-app** at the bottom (a zip with `app-debug.apk` inside). Or build it yourself: open `phone-app/` in Android Studio and press Run.
 2. **Install it.** Copy the APK to the phone and open it. Android asks to allow installing from that app (Files / Chrome): allow it. Play Protect may warn that it's an unknown app; choose *Install anyway*. **Updating later:** every build is signed with the same key (`phone-app/app/bagclip-debug.keystore`), so a newer APK installs straight over the old one and keeps all the permissions below. No uninstall needed.

@@ -4,7 +4,7 @@ A wearable clip that shows the song playing on your phone on a 0.96" OLED, with 
 
 **Bluetooth only:** the clip connects to your Android phone over Bluetooth Low Energy. No Wi-Fi, no phone hotspot, no Spotify keys. The Bag Clip app on the phone sends the song (from Spotify or any music app) and handles the play/skip taps. Wi-Fi (OTA updates, web page) is an optional build setting, off by default. iPhone can't run the companion app; see `PROJECT.md`.
 
-Built on an ESP32-C3 SuperMini with a TTP223 touch sensor, powered by a 500 mAh LiPo and a TP4056 USB-C charger.
+Built on an ESP32-C3 SuperMini with a TTP223 touch sensor, powered by a 450 mAh LiPo and a TP4056 USB-C charger.
 
 ## What's here
 
