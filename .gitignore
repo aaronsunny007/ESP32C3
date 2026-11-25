@@ -1,0 +1,10 @@
+# Spotify credentials: never commit
+secrets.h
+**/secrets.h
+
+# Arduino / PlatformIO build output
+build/
+.pio/
+*.bin
+*.elf
+*.map
