@@ -14,7 +14,7 @@ Source of truth for the hardware: *Spotify Bag Clip Complete Guide v6* (in `docs
 | Firmware v2 (Bluetooth setup, battery, panda, album art, queue, settings, OTA) | Written 25 Nov 2026, superseded by v3 |
 | Firmware v3: Bluetooth only + Android app (Wi-Fi optional, off) | Written 25 Nov 2026. Firmware and APK build on GitHub (see "Build check"), **not yet tested on hardware or a phone** |
 | Animated idle panda + GIF converter (`tools/gif_to_frames.py`) | Written 25 Nov 2026. Compile checked on GitHub, **not yet seen on a real OLED** |
-| Parts ordered | Main parts ordered 24–25 Nov 2026 (see "Parts"). **Still to buy:** 1N5819 diode, 2 × 100 kΩ resistors, jumper wires, badge clip, foam tape |
+| Parts ordered | Main parts ordered 24–25 Nov 2026 (see "Parts"). **Still to buy:** breadboard, jumper wires (M-M + M-F), 1N5819 diode, 2 × 100 kΩ resistors, badge clip, foam tape |
 | Pre-flight stage 1: USB & board | To do |
 | Pre-flight stage 2: OLED & touch | To do |
 | Pre-flight stage 3: install app, pair, song shows on the clip | To do |
@@ -22,7 +22,7 @@ Source of truth for the hardware: *Spotify Bag Clip Complete Guide v6* (in `docs
 | Pre-flight stage 5: battery smoke test + battery level | To do |
 | Enclosure + final assembly | To do |
 
-**Next step:** buy the missing parts (diode, resistors, jumper wires, clip, foam tape; see "Parts → Still to buy"). Meanwhile, install the Android app from the latest GitHub build on the Pixel and check it still shows the song after an hour with the phone locked. When the parts arrive, solder the SuperMini's headers and flash `firmware/bag_clip` for pre-flight stages 1–2.
+**Next step:** buy the missing parts (breadboard, jumper wires, diode, resistors, clip, foam tape; see "Parts → Still to buy"). Meanwhile, install the Android app from the latest GitHub build on the Pixel and check it still shows the song after an hour with the phone locked. When the parts arrive, solder the SuperMini's headers and flash `firmware/bag_clip` for pre-flight stages 1–2.
 
 ## How the clip talks to your phone (Bluetooth only)
 
@@ -130,7 +130,8 @@ Ordered so far: **₹868**.
 |---|---|---|---|---|
 | **Schottky diode 1N5819** (or SS14 / SS34 if you're happy with SMD) | "1N5819 Schottky diode" | pack of 5–10 | Stops USB on the ESP32 back-feeding the battery (Step B). 1 A, through-hole; the stripe marks the cathode | 5–10 |
 | **2 × 100 kΩ resistors** | "100K ohm 1/4W resistor" (1% metal film if possible) | 2 (a pack) | Battery level reading (Step B2) | 5–10 |
-| Jumper wires | "Female to Female jumper wires 40 pin" | 1 set | No-solder bench test (Step A) | 40–60 |
+| Breadboard | "400 point half size breadboard" | 1 | The ESP32 has one `3.3` and one `G` pin but the OLED and touch sensor both need them: the breadboard's + / − strips let them share (Step A) | 50–80 |
+| Jumper wires | "jumper wires 3 types male male female 40 pin" (one set each of M-M, M-F, F-F) | 1 set | M-M from ESP32 to the + / − strips, M-F from the breadboard to the OLED and sensor pins. Female-to-female alone can't do the bench test | 80–150 |
 | Badge clip | "metal alligator badge clip" | 1 | Attaches the clip to the bag | 10–30 |
 | Double-sided foam tape | "double sided foam tape" | 1 | Holds the sandwich stack together (Step C) | 20–50 |
 | Kapton or electrical tape | "kapton tape" / "electrical insulation tape" | 1 | Wraps the LiPo (skip if the soldering kit has tape) | 20–60 |
@@ -138,7 +139,7 @@ Ordered so far: **₹868**.
 | 100 nF capacitor (optional) | "104 ceramic capacitor" | 1 | Steadier battery reading | 2 |
 | Multimeter (optional, recommended) | "digital multimeter DT830" | 1 | Battery calibration (`BATT_CAL`) and checking sleep current after removing the power LED (Step B3) | 150–250 |
 
-Stages 1–2 of the pre-flight checklist only need the board, OLED, touch sensor and jumper wires. The diode and resistors aren't needed until stage 5.
+Stages 1–2 of the pre-flight checklist only need the board, OLED, touch sensor, breadboard and jumper wires. Step-by-step 3D build guide (bench test, soldered wiring, assembly, soldering basics): https://claude.ai/artifact/6hmrLLUdS83oHmUgmjvU4m (private to the repo owner unless shared). The diode and resistors aren't needed until stage 5.
 
 ## Safety rules (read before wiring)
 
