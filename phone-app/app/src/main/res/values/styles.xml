@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="PandaTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/panda_ink</item>
+        <item name="android:colorAccent">@color/bamboo_dark</item>
+        <item name="android:colorControlActivated">@color/bamboo_dark</item>
+        <item name="android:windowBackground">@color/panda_fur</item>
+        <item name="android:statusBarColor">@color/panda_ink</item>
+        <item name="android:navigationBarColor">@color/panda_fur</item>
+        <item name="android:textColorPrimary">@color/panda_ink</item>
+    </style>
+</resources>

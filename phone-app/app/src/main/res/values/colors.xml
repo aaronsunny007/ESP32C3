@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Panda theme: black ink, white fur, bamboo green. -->
+<resources>
+    <color name="panda_ink">#1A1A1A</color>
+    <color name="panda_fur">#FAFAF6</color>
+    <color name="panda_fog">#E7E7E0</color>
+    <color name="bamboo">#5E9E5A</color>
+    <color name="bamboo_dark">#3B7142</color>
+</resources>

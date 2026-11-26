@@ -18,7 +18,7 @@
         android:allowBackup="false"
         android:icon="@drawable/ic_clip"
         android:label="@string/app_name"
-        android:theme="@android:style/Theme.Material.Light.DarkActionBar">
+        android:theme="@style/PandaTheme">
 
         <activity
             android:name=".MainActivity"

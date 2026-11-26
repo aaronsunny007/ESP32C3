@@ -12,33 +12,36 @@
   (Settings > Pages > deploy from branch, folder /phone) or any https host.
 -->
 <style>
-  :root { --bg:#111; --card:#1c1c1c; --fg:#eee; --muted:#999; --accent:#1db954; --bad:#c44; }
+  :root { --bg:#fafaf6; --card:#fff; --fg:#1a1a1a; --muted:#6b6b66; --accent:#1a1a1a; --bamboo:#3b7142; --bad:#c44; }
   body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.4 system-ui, sans-serif; }
   main { max-width:480px; margin:0 auto; padding:16px; }
   h1 { font-size:1.4em; margin:0 0 12px; }
-  section { background:var(--card); border-radius:12px; padding:12px 14px; margin:12px 0; }
-  h2 { font-size:1em; margin:0 0 8px; color:var(--muted); font-weight:600; }
-  button { font:inherit; padding:8px 14px; border:0; border-radius:8px; background:var(--accent); color:#000; }
-  button.secondary { background:#333; color:var(--fg); }
+  section { background:var(--card); border:2px solid var(--fg); border-radius:16px; padding:12px 14px; margin:12px 0; }
+  h2 { font-size:1em; margin:0 0 8px; color:var(--bamboo); font-weight:700; }
+  h1 { display:flex; align-items:center; gap:10px; }
+  h1 svg { width:40px; height:40px; }
+  input[type=range] { accent-color:var(--bamboo); }
+  button { font:inherit; padding:8px 14px; border:0; border-radius:20px; background:var(--accent); color:#fafaf6; }
+  button.secondary { background:#e7e7e0; color:var(--fg); }
   button.bad { background:var(--bad); color:#fff; padding:4px 10px; }
   button:disabled { opacity:.4; }
   label { display:block; margin:10px 0 4px; }
   input[type=range] { width:100%; }
   input[type=text], input[type=password], input[type=number] { width:100%; box-sizing:border-box; padding:8px;
-    border-radius:8px; border:1px solid #444; background:#000; color:var(--fg); font:inherit; }
+    border-radius:8px; border:1px solid #bbb; background:#fff; color:var(--fg); font:inherit; }
   .row { display:flex; gap:8px; align-items:center; justify-content:space-between; }
   .controls { display:flex; gap:8px; justify-content:center; }
   .controls button { font-size:1.3em; min-width:64px; }
   .muted { color:var(--muted); font-size:.9em; }
   ul { list-style:none; padding:0; margin:0; }
-  li { padding:6px 0; border-bottom:1px solid #2a2a2a; }
+  li { padding:6px 0; border-bottom:1px solid #e7e7e0; }
   #log { color:var(--muted); font-size:.85em; min-height:1.2em; }
   .hidden { display:none; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Bag Clip</h1>
+  <h1><svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="23" fill="#5e9e5a"/><circle cx="12" cy="14" r="6" fill="#1a1a1a"/><circle cx="36" cy="14" r="6" fill="#1a1a1a"/><path d="M24 10c9 0 15 6 15 14s-6 14-15 14-15-6-15-14 6-14 15-14z" fill="#fafaf6"/><path d="M16.5 20.5c2.5-1.5 5 .5 4.5 4-.8 3-4 3.500-5.500 1.200-1-1.500-1-4 1-5.200zM31.500 20.500c-2.500-1.500-5 .5-4.500 4 .8 3 4 3.500 5.500 1.200 1-1.500 1-4-1-5.200z" fill="#1a1a1a"/><circle cx="18.300" cy="24.600" r="1.200" fill="#fafaf6"/><circle cx="29.700" cy="24.600" r="1.200" fill="#fafaf6"/><path d="M21.500 29h5l-2.500 2.600z" fill="#1a1a1a"/></svg> Bag Clip</h1>
   <div class="row">
     <button id="connect">Connect</button>
     <span id="conn" class="muted">Not connected</span>

@@ -1,12 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Launcher icon: a little OLED clip with a music note. -->
+<!-- Launcher icon and header: a panda face. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"
     android:viewportWidth="48"
     android:viewportHeight="48">
-    <path android:fillColor="#1DB954" android:pathData="M24,2a22,22 0,1 1,0 44a22,22 0,1 1,0 -44z" />
-    <path android:fillColor="#121212" android:pathData="M10,14h28a2,2 0,0 1,2 2v16a2,2 0,0 1,-2 2h-28a2,2 0,0 1,-2 -2v-16a2,2 0,0 1,2 -2z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M27,17v9.2a3.2,3.2 0,1 0,2 3V21h4v-4z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M12,20h10v2h-10zM12,24h8v2h-8zM12,28h6v2h-6z" />
+    <path android:fillColor="#5E9E5A" android:pathData="M24,1a23,23 0,1 1,0 46a23,23 0,1 1,0 -46z" />
+    <!-- ears -->
+    <path android:fillColor="#1A1A1A" android:pathData="M12,8a6,6 0,1 1,0 12a6,6 0,1 1,0 -12z" />
+    <path android:fillColor="#1A1A1A" android:pathData="M36,8a6,6 0,1 1,0 12a6,6 0,1 1,0 -12z" />
+    <!-- face -->
+    <path android:fillColor="#FAFAF6" android:pathData="M24,10c9,0 15,6 15,14c0,8 -6,14 -15,14c-9,0 -15,-6 -15,-14c0,-8 6,-14 15,-14z" />
+    <!-- eye patches -->
+    <path android:fillColor="#1A1A1A" android:pathData="M16.5,20.5c2.5,-1.5 5,0.5 4.5,4c-0.8,3 -4,3.5 -5.5,1.2c-1,-1.5 -1,-4 1,-5.2z" />
+    <path android:fillColor="#1A1A1A" android:pathData="M31.5,20.5c-2.5,-1.5 -5,0.5 -4.5,4c0.8,3 4,3.5 5.5,1.2c1,-1.5 1,-4 -1,-5.2z" />
+    <!-- eye shine -->
+    <path android:fillColor="#FAFAF6" android:pathData="M18.3,23.4a1.2,1.2 0,1 1,0 2.4a1.2,1.2 0,1 1,0 -2.4z" />
+    <path android:fillColor="#FAFAF6" android:pathData="M29.7,23.4a1.2,1.2 0,1 1,0 2.4a1.2,1.2 0,1 1,0 -2.4z" />
+    <!-- nose and mouth -->
+    <path android:fillColor="#1A1A1A" android:pathData="M21.5,29h5l-2.5,2.6z" />
+    <path android:strokeColor="#1A1A1A" android:strokeWidth="1" android:strokeLineCap="round" android:pathData="M24,31.6v1.4M21.5,34c1,1 4,1 5,0" />
 </vector>

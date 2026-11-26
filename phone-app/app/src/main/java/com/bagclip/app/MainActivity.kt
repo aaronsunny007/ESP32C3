@@ -8,7 +8,9 @@ import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Intent
+import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -20,7 +22,9 @@ import android.text.InputType
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.view.Gravity
 import android.widget.ScrollView
 import android.widget.SeekBar
 import android.widget.TextView
@@ -53,6 +57,25 @@ class MainActivity : Activity() {
             setPadding(pad, pad, pad, pad)
         }
         setContentView(ScrollView(this).apply { addView(col) })
+
+        // Panda header
+        col.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(INK, 20)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            addView(ImageView(context).apply {
+                setImageResource(R.drawable.ic_clip)
+                layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
+            })
+            addView(TextView(context).apply {
+                text = "Bag Clip"
+                textSize = 24f
+                setTextColor(FUR)
+                setTypeface(typeface, Typeface.BOLD)
+                setPadding(dp(12), 0, 0, 0)
+            })
+        })
 
         status = text(col, "", 18f, bold = true)
         song = text(col, "", 15f)
@@ -214,6 +237,15 @@ class MainActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
+    private fun rounded(color: Int, radiusDp: Int) =
+        GradientDrawable().apply { setColor(color); cornerRadius = dp(radiusDp).toFloat() }
+
+    private companion object {
+        val INK = Color.parseColor("#1A1A1A")
+        val FUR = Color.parseColor("#FAFAF6")
+        val BAMBOO_DARK = Color.parseColor("#3B7142")
+    }
+
     private fun text(parent: LinearLayout, s: String, size: Float, bold: Boolean = false) =
         TextView(this).apply {
             text = s
@@ -224,7 +256,10 @@ class MainActivity : Activity() {
         }
 
     private fun heading(parent: LinearLayout, s: String) =
-        text(parent, s, 20f, bold = true).apply { setPadding(0, dp(20), 0, dp(4)) }
+        text(parent, "\uD83C\uDF8B $s", 20f, bold = true).apply {
+            setTextColor(BAMBOO_DARK)
+            setPadding(0, dp(20), 0, dp(4))
+        }
 
     private fun small(parent: LinearLayout, s: String) = text(parent, s, 13f).apply { alpha = 0.75f }
 
@@ -232,6 +267,9 @@ class MainActivity : Activity() {
         Button(this).apply {
             text = s
             isAllCaps = false
+            setTextColor(FUR)
+            background = rounded(INK, 24)
+            stateListAnimator = null
             setOnClickListener { onClick() }
             parent.addView(this)
         }
