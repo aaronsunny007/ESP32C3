@@ -1,9 +1,18 @@
-# Handoff: where we left off (27 Nov 2026)
+# Handoff: where we left off (27 Nov 2026, evening)
 
 Paste this into a new chat (or say "read HANDOFF.md and PROJECT.md in aaronsunny007/esp32c3") to continue.
+**Scope: the clip and its 0.96" 128x64 one-colour OLED only.** No web pages unless the user asks for one.
 
 ## Project
-ESP32-C3 "Now Playing" bag clip: 0.96" OLED shows the song playing on the phone; tap pad = play/pause/skip. **v3 = Bluetooth only** + a small Android app (`phone-app/`). Wi-Fi is an optional build flag (off). Source of truth: `PROJECT.md`. Repo: `aaronsunny007/esp32c3`, default branch `claude/project-thread-q67a4a`. All PRs (#1 v2, #2 v3 + review fixes, #3 animated panda) are merged.
+ESP32-C3 "Now Playing" bag clip: 0.96" OLED shows the song playing on the phone; tap pad = play/pause/skip. **v3 = Bluetooth only** + a small Android app (`phone-app/`). Wi-Fi is an optional build flag (off). Source of truth: `PROJECT.md`. Repo: `aaronsunny007/esp32c3`, default branch `claude/project-thread-q67a4a`. PRs #1-#4 merged (#4 = birthday greeting).
+
+## Latest work (27 Nov)
+- **Birthday greeting at switch-on** (merged, PR #4): panda in its cap + "Hpy bday Kusuma." -> tap -> the paw takes the cap off -> "From your lovely panda" -> tap -> normal clip. Edit text/animation in `tools/make_oled_panda.py`; `GREETING_ENABLED` in `config.h`.
+- **Branch `claude/clip-menu` (NOT merged yet, builds green):**
+  - Idle panda redrawn as the birthday panda (`tools/draw_panda.py` -> `gif_to_frames.py --rest 27`).
+  - **Menu**: hold 1.5 s opens it; tap = next item, hold = choose, hold inside an item = back; closes after 30 s. Items: Music player, Dino game, Motivation (random line, edit `motivation.h`), Show greeting, Brightness, Info, Power off (deep sleep), Exit. Code: `menu.cpp`, `dino.cpp`, `motivation.h`, drawing in `ui.cpp`.
+  - Next step: user says "merge" -> open PR into `claude/project-thread-q67a4a` and merge when CI is green.
+- **Screen previews without hardware:** compile `firmware/bag_clip/ui.cpp` (+ menu/dino) on Linux against Adafruit-GFX with stub Arduino/SSD1306 headers that dump the 128x64 buffer (rebuild the stubs if needed; min/max stubs must return by value).
 
 ## Decisions made
 - **v3 (Bluetooth-only)** chosen over v2 (Wi-Fi) after a council review. User's phone: **Google Pixel** (stock Android 13+), so v3 works and no background-killer settings are needed.
