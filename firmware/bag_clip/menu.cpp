@@ -27,6 +27,13 @@ static DinoGame game;
 
 static void show(View v) { view = v; dirty = true; }
 
+// A random motivation line, never the one already on the screen.
+static uint8_t randomQuote() {
+  if (MOTIVATION_COUNT < 2) return 0;
+  uint8_t q = esp_random() % (MOTIVATION_COUNT - 1);
+  return q >= quote ? q + 1 : q;
+}
+
 void menuOpen() {
   view = V_LIST;
   sel = 0;
@@ -56,7 +63,7 @@ MenuAction menuTaps(int taps) {
   dirty = true;
   switch (view) {
     case V_LIST: sel = (sel + 1) % IT_COUNT; return MENU_NONE;
-    case V_MOTIVATION: quote = (quote + 1) % MOTIVATION_COUNT; return MENU_NONE;
+    case V_MOTIVATION: quote = randomQuote(); return MENU_NONE;
     case V_BRIGHTNESS:
       brightLevel = (brightLevel + 1) % sizeof(BRIGHT_LEVELS);
       settings.brightness = BRIGHT_LEVELS[brightLevel];   // the main loop applies it at once
@@ -76,7 +83,7 @@ MenuAction menuHold() {
   switch (sel) {
     case IT_MUSIC:      show(V_MUSIC); return MENU_NONE;
     case IT_DINO:       dinoReset(game); show(V_DINO); return MENU_NONE;
-    case IT_MOTIVATION: show(V_MOTIVATION); return MENU_NONE;
+    case IT_MOTIVATION: quote = randomQuote(); show(V_MOTIVATION); return MENU_NONE;
     case IT_BRIGHTNESS: brightLevel = nearestBright(); show(V_BRIGHTNESS); return MENU_NONE;
     case IT_GREETING:   view = V_OFF; return MENU_GREETING;
     case IT_INFO:       view = V_OFF; return MENU_INFO;

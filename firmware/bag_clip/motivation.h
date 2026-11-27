@@ -1,4 +1,5 @@
-// Lines for the Motivation screen (menu -> Motivation). Tap shows the next one.
+// Lines for the Motivation screen (menu -> Motivation). It opens on a random line and
+// each tap shows another random one (never the same twice in a row).
 // Edit freely: each line is wrapped to the 21-character-wide OLED, about 5 lines (100
 // characters) fit. Plain ASCII only (the OLED font has no accents or emoji).
 #pragma once
