@@ -17,7 +17,8 @@
  *   1 tap -> play / pause    2 taps -> next    3 taps -> previous
  *   hold 1.5 s -> info screen (battery, phone, version)
  *   tap while asleep -> wake
- *   at switch-on: greeting screens ("Hpy bday Kusuma." -> "From your lovely panda"),
+ *   at switch-on: greeting screens ("Hpy bday Kusuma." with the cap on -> the cap lifts
+ *   off -> "From your lovely panda"),
  *   one tap each, then the clip works as above
  */
 
@@ -215,6 +216,7 @@ void loop() {
   // pairing PIN is allowed to cover them (the phone needs to see it).
   if (greetStage < GREET_DONE && !st.blePasskey) {
     if (greetShown != greetStage) {
+      if (greetShown == 0 && greetStage == 1) uiGreetingHatOff();   // the tap takes the cap off
       greetShown = greetStage;
       uiSetContrast(settings.brightness);
       uiGreeting(greetStage);
