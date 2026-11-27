@@ -1,76 +1,108 @@
-"""Draws the OLED panda and writes panda_64.h / splash_128x64.h (+ previews) into the current folder.
-Copy splash_128x64.h to firmware/bag_clip/splash_img.h and rename SPLASH_IMG... only if you change the name.
-Needs Pillow."""
+#!/usr/bin/env python3
+"""Draws the power-on greeting for the 0.96" OLED and writes firmware/bag_clip/greeting_img.h.
+
+Two 128x64 screens, panda on the left and text on the right:
+  1. "Hpy bday" / "Kusuma."           (shown at power-on, a tap moves on)
+  2. "From your" / "lovely" / "panda"  (a tap moves on to the normal clip)
+
+Change the lines in SCREENS and run it again:
+    python3 tools/make_oled_panda.py
+It also writes OLED-look previews (6x size) next to the header: greeting_1_preview.png ...
+Needs Pillow (pip install pillow).
+"""
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 from PIL import Image, ImageDraw, ImageFont
 from png_to_bitmap import to_array
 
-K = 4          # supersample so edges downscale cleanly
-N = 64 * K
+ROOT = Path(__file__).resolve().parent.parent
+OUT_H = ROOT / "firmware" / "bag_clip" / "greeting_img.h"
+PREVIEW_DIR = ROOT / "docs" / "images"
+
+SCREENS = [
+    ("GREET_BDAY", ["Hpy bday", "Kusuma."]),
+    ("GREET_FROM", ["From your", "lovely", "panda"]),
+]
+
+BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+TEXT_X, TEXT_W = 66, 61          # right half of the screen, 1 px margin
+
 
 def panda():
-    im = Image.new("L", (N, N), 0)
+    """64x64 1-bit panda with a bow tie, lit = white. Drawn 4x larger, then shrunk."""
+    n = 256
+    im = Image.new("L", (n, n), 0)
     d = ImageDraw.Draw(im)
-    s = N / 256
+
     def e(cx, cy, rx, ry, fill, outline=None, w=0):
-        d.ellipse([(cx-rx)*s, (cy-ry)*s, (cx+rx)*s, (cy+ry)*s], fill=fill, outline=outline, width=int(w*s))
-    # body (lit) + arms/feet (dark with lit outline)
-    e(128, 246, 70, 56, 255)
-    # ears: dark inside, lit outline
-    e(52, 66, 32, 32, 0, 255, 9); e(204, 66, 32, 32, 0, 255, 9)
-    # head
-    e(128, 128, 94, 74, 255)
-    # eye patches (dark) + lit eyes
-    e(91, 128, 24, 30, 0); e(165, 128, 24, 30, 0)
-    e(92, 124, 9, 10, 255); e(164, 124, 9, 10, 255)
-    # nose + smile
-    e(128, 152, 13, 9, 0)
-    d.arc([104*s, 150*s, 128*s, 178*s], 20, 160, fill=0, width=int(8*s))
-    d.arc([128*s, 150*s, 152*s, 178*s], 20, 160, fill=0, width=int(8*s))
-    # top hat: dark with lit outline and lit band
-    d.rounded_rectangle([98*s, 4*s, 158*s, 58*s], radius=6*s, fill=255)
-    d.rectangle([98*s, 34*s, 158*s, 46*s], fill=0)
-    d.rounded_rectangle([78*s, 54*s, 178*s, 66*s], radius=5*s, fill=255)
-    d.rectangle([78*s, 66*s, 178*s, 68*s], fill=0)
-    # bow tie (dark on the lit chest), tucked under the chin
-    d.polygon([(128*s,208*s),(88*s,188*s),(88*s,228*s)], fill=0)
-    d.polygon([(128*s,208*s),(168*s,188*s),(168*s,228*s)], fill=0)
+        d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=fill, outline=outline, width=w)
+
+    e(128, 246, 70, 56, 255)                                   # body
+    e(52, 66, 32, 32, 0, 255, 9); e(204, 66, 32, 32, 0, 255, 9)  # ears: dark, lit outline
+    e(128, 128, 94, 74, 255)                                   # head
+    e(91, 128, 24, 30, 0); e(165, 128, 24, 30, 0)              # eye patches
+    e(92, 124, 9, 10, 255); e(164, 124, 9, 10, 255)            # eyes
+    e(128, 152, 13, 9, 0)                                      # nose
+    d.arc([104, 150, 128, 178], 20, 160, fill=0, width=8)      # smile
+    d.arc([128, 150, 152, 178], 20, 160, fill=0, width=8)
+    d.polygon([(128, 208), (88, 188), (88, 228)], fill=0)      # bow tie
+    d.polygon([(128, 208), (168, 188), (168, 228)], fill=0)
     e(128, 208, 11, 13, 0)
-    d.ellipse([122*s, 202*s, 134*s, 214*s], fill=255)
+    d.ellipse([122, 202, 134, 214], fill=255)
     return im.resize((64, 64), Image.LANCZOS).point(lambda v: 255 if v >= 128 else 0).convert("1")
 
-p = panda()
-p.save("panda_64.png")
 
-# 128x64 splash: panda left, wordmark right
-sp = Image.new("1", (128, 64), 0)
-sp.paste(p, (0, 0))
-d = ImageDraw.Draw(sp)
-try:
-    f1 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 14)
-    f2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 9)
-except Exception:
-    f1 = f2 = ImageFont.load_default()
-d.text((68, 18), "Bag", font=f1, fill=1)
-d.text((68, 33), "Clip", font=f1, fill=1)
-d.text((68, 51), "now playing", font=f2, fill=1)
-sp.save("splash_128x64.png")
+def fit_font(lines):
+    """Largest bold font (max 15 px) where every line fits the text column."""
+    for size in range(15, 7, -1):
+        f = ImageFont.truetype(BOLD, size)
+        if all(f.getbbox(t)[2] <= TEXT_W for t in lines):
+            return f
+    return ImageFont.truetype(BOLD, 8)
 
-open("panda_64.h", "w").write("// Kawaii panda with hat and bow tie for the 0.96\" SSD1306 OLED\n" + to_array(p, "PANDA_IMG") + "\n")
-open("splash_128x64.h", "w").write("// Bag Clip splash screen, full 128x64 OLED\n" + to_array(sp, "SPLASH_IMG") + "\n")
 
-# preview: OLED-look, 6x, with pixel grid
-def preview(img, name):
+def screen(p, lines):
+    img = Image.new("1", (128, 64), 0)
+    img.paste(p, (0, 0))
+    d = ImageDraw.Draw(img)
+    f = fit_font(lines)
+    asc, desc = f.getmetrics()
+    step = asc + desc + 2
+    y = (64 - step * len(lines) + 2) // 2
+    for t in lines:
+        d.text((TEXT_X, y), t, font=f, fill=1)
+        y += step
+    return img
+
+
+def preview(img, path):
     z = 6
-    big = img.convert("L").resize((img.width*z, img.height*z), Image.NEAREST).convert("RGB")
+    big = img.convert("L").resize((img.width * z, img.height * z), Image.NEAREST).convert("RGB")
     px = big.load()
     for y in range(big.height):
         for x in range(big.width):
-            lit = px[x, y][0] > 0
-            gap = (x % z == 0) or (y % z == 0)
-            px[x, y] = (6, 14, 28) if gap else ((140, 196, 255) if lit else (3, 6, 12))
-    out = Image.new("RGB", (big.width+24, big.height+24), (20, 20, 24)); out.paste(big, (12, 12)); out.save(name)
-preview(p, "panda_64_preview.png"); preview(sp, "splash_128x64_preview.png")
-print("ok")
+            gap = x % z == 0 or y % z == 0
+            px[x, y] = (6, 14, 28) if gap else ((140, 196, 255) if px[x, y][0] else (3, 6, 12))
+    out = Image.new("RGB", (big.width + 24, big.height + 24), (20, 20, 24))
+    out.paste(big, (12, 12))
+    out.save(path)
+
+
+def main():
+    p = panda()
+    parts = ["// Power-on greeting screens, 128x64. Generated by tools/make_oled_panda.py: edit that, not this.",
+             "#pragma once", ""]
+    for i, (name, lines) in enumerate(SCREENS, 1):
+        img = screen(p, lines)
+        parts.append(f"// Screen {i}: " + " / ".join(lines))
+        parts.append(to_array(img, name))
+        parts.append("")
+        preview(img, PREVIEW_DIR / f"greeting_{i}_preview.png")
+    OUT_H.write_text("\n".join(parts))
+    print("wrote", OUT_H.relative_to(ROOT))
+
+
+if __name__ == "__main__":
+    main()

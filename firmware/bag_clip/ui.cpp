@@ -6,7 +6,7 @@
 #include "battery.h"
 #include "settings.h"
 #include "panda_anim.h"
-#include "splash_img.h"
+#include "greeting_img.h"
 #include "ble_link.h"
 #if WIFI_MODE
 #include <WiFi.h>
@@ -69,10 +69,11 @@ void uiMessage(const char *l1, const char *l2, const char *l3) {
   display.display();
 }
 
-// Power-on picture: the panda and "Bag Clip" (128x64, see tools/make_oled_panda.py).
-void uiSplash() {
+// Power-on greeting: 0 = "Hpy bday Kusuma.", 1 = "From your lovely panda".
+// Pictures come from tools/make_oled_panda.py (greeting_img.h).
+void uiGreeting(uint8_t stage) {
   display.clearDisplay();
-  display.drawBitmap(0, 0, SPLASH_IMG, SPLASH_IMG_W, SPLASH_IMG_H, SSD1306_WHITE);
+  display.drawBitmap(0, 0, stage == 0 ? GREET_BDAY : GREET_FROM, GREET_BDAY_W, GREET_BDAY_H, SSD1306_WHITE);
   display.display();
 }
 

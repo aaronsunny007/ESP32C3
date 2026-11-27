@@ -339,6 +339,7 @@ python3 tools/gif_to_frames.py docs/images/panda_idle.gif --rest 25
 | Now playing | Status bar (play/pause icon, Bluetooth icon with an x when the phone isn't connected, battery %), album art on the left, title / artist / ► next-up scrolling on the right, elapsed and total time, progress bar |
 | Paused | Same as now playing with a pause icon for 10 s, then the panda |
 | Panda (idle) | Animated panda with "Nothing playing", "Paused", "Phone not connected" or "Open the Bag Clip app". Dims after the dim time, sleeps after the sleep time |
+| Greeting | At switch-on: panda with "Hpy bday Kusuma.", tap, then "From your lovely panda", tap, then the normal screens. Survives sleep; starts over only after switching off and on. Pictures and text: `tools/make_oled_panda.py` |
 | Set me up! | Never paired: open the app and tap Find my clip |
 | Bluetooth PIN | While your phone pairs |
 | Info | Hold the pad 1.5 s: version, phone link, which app is playing, phone battery, clip battery voltage |

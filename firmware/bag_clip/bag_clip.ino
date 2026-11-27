@@ -17,6 +17,8 @@
  *   1 tap -> play / pause    2 taps -> next    3 taps -> previous
  *   hold 1.5 s -> info screen (battery, phone, version)
  *   tap while asleep -> wake
+ *   at switch-on: greeting screens ("Hpy bday Kusuma." -> "From your lovely panda"),
+ *   one tap each, then the clip works as above
  */
 
 #include "esp_sleep.h"
@@ -33,6 +35,14 @@ static unsigned long pressStart = 0, lastTapTime = 0;
 static int tapCount = 0;
 static bool lastTouch = false, longFired = false, ignoreUntilRelease = false;
 static Screen lastScreen = SCR_PANDA;
+
+// Power-on greeting, one tap per screen: 0 = birthday, 1 = "from your panda", 2 = done.
+// Kept in RTC memory, so it survives deep sleep (a tap wakes it on the same screen) and
+// starts again from the first screen only when the clip is switched off and on.
+#define GREET_DONE 2
+RTC_DATA_ATTR static uint8_t greetStage = 0;
+static int8_t greetShown = -1;        // which greeting screen is on the OLED right now
+static bool forceRedraw = false;      // repaint the normal screen once the greeting ends
 
 static void markActivity() {
   lastActivity = millis();
@@ -121,6 +131,13 @@ static void handleTouch() {
   lastTouch = down;
 
   if (tapCount > 0 && !down && now - lastTapTime > TAP_WINDOW_MS) {
+    if (greetStage < GREET_DONE) {   // during the greeting a tap only moves to the next screen
+      greetStage++;
+      if (greetStage == GREET_DONE) forceRedraw = true;
+      tapCount = 0;
+      markActivity();
+      return;
+    }
     sendCommand(tapCount == 1 ? CMD_TOGGLE : tapCount == 2 ? CMD_NEXT : CMD_PREV);
     tapCount = 0;
     markActivity();
@@ -162,13 +179,12 @@ void setup() {
   settingsBegin();
   stateBegin();
   uiBegin();
-  // Power-on shows the panda splash; waking from sleep stays quick with a short message.
-  unsigned long splashEnd = 0;
-  if (wokeFromTouch) {
-    uiMessage("Waking up...", "v" FW_VERSION);
+  if (!wokeFromTouch) greetStage = 0;   // switched on: the greeting starts from the top
+  if (greetStage < GREET_DONE) {
+    uiGreeting(greetStage);
+    greetShown = greetStage;
   } else {
-    uiSplash();
-    splashEnd = millis() + SPLASH_MS;
+    uiMessage(wokeFromTouch ? "Waking up..." : "Bag Clip", "v" FW_VERSION);
   }
 
   batteryBegin();
@@ -178,7 +194,6 @@ void setup() {
 
   bleBegin();
   wifiLinkBegin();
-  while ((long)(splashEnd - millis()) > 0) delay(10);   // keep the splash up for SPLASH_MS in total
   markActivity();
 }
 
@@ -196,8 +211,27 @@ void loop() {
   if (st.playing || st.otaActive || st.blePasskey) lastActivity = now;
   if (st.playing) lastPlayingAt = now;
 
+  // Greeting screens stay until tapped. Bluetooth keeps running underneath; only a
+  // pairing PIN is allowed to cover them (the phone needs to see it).
+  if (greetStage < GREET_DONE && !st.blePasskey) {
+    if (greetShown != greetStage) {
+      greetShown = greetStage;
+      uiSetContrast(settings.brightness);
+      uiGreeting(greetStage);
+    }
+    if (batteryCritical()) enterDeepSleep("Battery low", "Charge or switch off");
+    unsigned long greetSleepMs = settings.sleepAfterMin * 60000UL;
+    if (greetSleepMs > 0 && !st.playing && !st.otaActive && now - lastActivity > greetSleepMs) {
+      enterDeepSleep("Sleeping...", "Tap to wake");
+    }
+    delay(5);
+    return;
+  }
+  greetShown = -1;   // a PIN covered the greeting: draw it again afterwards
+
   Screen screen = pickScreen(st);
-  bool changed = screen != lastScreen;
+  bool changed = screen != lastScreen || forceRedraw;
+  forceRedraw = false;
   if (changed) {
     lastScreen = screen;
     idleScreenSince = now;
