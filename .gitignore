@@ -18,3 +18,4 @@ phone-app/local.properties
 *.jks
 # ...except the app's shared signing key, so every build can update the installed app
 !phone-app/app/bagclip-debug.keystore
+__pycache__/
