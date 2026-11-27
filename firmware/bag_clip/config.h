@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #define FW_VERSION   "3.0.1"
+#define SPLASH_MS    2000   // how long the panda splash shows at power-on
 #define DEVICE_NAME  "BagClip"     // Bluetooth name, and http://bagclip.local on Wi-Fi
 #define MDNS_NAME    "bagclip"
 

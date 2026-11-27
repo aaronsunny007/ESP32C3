@@ -162,7 +162,14 @@ void setup() {
   settingsBegin();
   stateBegin();
   uiBegin();
-  uiMessage(wokeFromTouch ? "Waking up..." : "Bag Clip", "v" FW_VERSION);
+  // Power-on shows the panda splash; waking from sleep stays quick with a short message.
+  unsigned long splashEnd = 0;
+  if (wokeFromTouch) {
+    uiMessage("Waking up...", "v" FW_VERSION);
+  } else {
+    uiSplash();
+    splashEnd = millis() + SPLASH_MS;
+  }
 
   batteryBegin();
   if (batteryPresent() && !batteryOnUsb() && batteryMv() < BATT_CRITICAL_MV) {
@@ -171,6 +178,7 @@ void setup() {
 
   bleBegin();
   wifiLinkBegin();
+  while ((long)(splashEnd - millis()) > 0) delay(10);   // keep the splash up for SPLASH_MS in total
   markActivity();
 }
 

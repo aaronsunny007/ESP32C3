@@ -6,6 +6,7 @@
 #include "battery.h"
 #include "settings.h"
 #include "panda_anim.h"
+#include "splash_img.h"
 #include "ble_link.h"
 #if WIFI_MODE
 #include <WiFi.h>
@@ -65,6 +66,13 @@ void uiMessage(const char *l1, const char *l2, const char *l3) {
   centered(l1, y);
   if (l2) centered(l2, y + 12);
   if (l3) centered(l3, y + 24);
+  display.display();
+}
+
+// Power-on picture: the panda and "Bag Clip" (128x64, see tools/make_oled_panda.py).
+void uiSplash() {
+  display.clearDisplay();
+  display.drawBitmap(0, 0, SPLASH_IMG, SPLASH_IMG_W, SPLASH_IMG_H, SSD1306_WHITE);
   display.display();
 }
 
