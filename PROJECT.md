@@ -332,6 +332,35 @@ python3 tools/draw_panda.py
 python3 tools/gif_to_frames.py docs/images/panda_idle.gif --rest 25
 ```
 
+## Editing the greeting
+
+At switch-on the clip shows a birthday greeting before anything else, one tap per step:
+
+1. The panda wearing its cap, **"Hpy bday Kusuma."**
+2. Tap: the panda's paw reaches up, takes the cap off and lifts it away (about 1.2 s).
+3. The panda without its cap, **"From your lovely panda"**.
+4. Tap: the normal screens.
+
+![greeting animation](docs/images/greeting_anim_preview.gif)
+
+Everything about it is drawn by one script, `tools/make_oled_panda.py`, which writes `firmware/bag_clip/greeting_img.h`. Don't edit the `.h` by hand; change the script and run it again:
+
+| To change | Edit, in `tools/make_oled_panda.py` |
+|---|---|
+| The words | `SCREEN_1_LINES`, `SCREEN_2_LINES` at the top (1–4 short lines each; the font shrinks to fit) |
+| How the paw moves, how fast | `ANIMATION` at the top: each step says where the paw ends, where the cap ends, how many pictures and how many milliseconds each |
+| The drawing | `panda()`, `hat()`, `paw()` |
+
+```
+python3 tools/make_oled_panda.py
+```
+
+Then look at `docs/images/greeting_1_preview.png`, `greeting_2_preview.png` and `greeting_anim_preview.gif` (enlarged OLED look) and flash `firmware/bag_clip` again.
+
+- **Switch it off** without deleting anything: `GREETING_ENABLED 0` in `firmware/bag_clip/config.h`.
+- While the greeting is showing, taps only move it on (nothing is sent to the phone). If the clip goes to sleep in the middle, a tap wakes it on the same step; it starts from the top only after switching off and on.
+- The firmware side is small: `uiGreeting()` and `uiGreetingHatOff()` in `ui.cpp`, and the `greetStage` lines in `bag_clip.ino`.
+
 ## Screens
 
 | Screen | When |
@@ -339,6 +368,7 @@ python3 tools/gif_to_frames.py docs/images/panda_idle.gif --rest 25
 | Now playing | Status bar (play/pause icon, Bluetooth icon with an x when the phone isn't connected, battery %), album art on the left, title / artist / ► next-up scrolling on the right, elapsed and total time, progress bar |
 | Paused | Same as now playing with a pause icon for 10 s, then the panda |
 | Panda (idle) | Animated panda with "Nothing playing", "Paused", "Phone not connected" or "Open the Bag Clip app". Dims after the dim time, sleeps after the sleep time |
+| Greeting | At switch-on: panda in its cap with "Hpy bday Kusuma.", tap, the panda's paw takes the cap off, then "From your lovely panda", tap, then the normal screens. Survives sleep; starts over only after switching off and on. See "Editing the greeting" |
 | Set me up! | Never paired: open the app and tap Find my clip |
 | Bluetooth PIN | While your phone pairs |
 | Info | Hold the pad 1.5 s: version, phone link, which app is playing, phone battery, clip battery voltage |

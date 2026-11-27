@@ -18,6 +18,8 @@ enum Screen : uint8_t {
 bool uiBegin();
 void uiSetContrast(uint8_t contrast);
 void uiOff();
+void uiGreeting(uint8_t stage);
+void uiGreetingHatOff();
 void uiMessage(const char *line1, const char *line2 = nullptr, const char *line3 = nullptr);
 // Idle panda: true freezes the animation on its resting picture (screen dimmed),
 // false restarts it from the beginning.

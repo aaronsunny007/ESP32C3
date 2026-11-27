@@ -6,6 +6,7 @@
 #include "battery.h"
 #include "settings.h"
 #include "panda_anim.h"
+#include "greeting_img.h"
 #include "ble_link.h"
 #if WIFI_MODE
 #include <WiFi.h>
@@ -66,6 +67,26 @@ void uiMessage(const char *l1, const char *l2, const char *l3) {
   if (l2) centered(l2, y + 12);
   if (l3) centered(l3, y + 24);
   display.display();
+}
+
+// Power-on greeting: 0 = "Hpy bday Kusuma." (panda in its cap), 1 = "From your lovely panda".
+// The pictures and the animation come from tools/make_oled_panda.py (greeting_img.h):
+// change the text or the animation there, not here.
+void uiGreeting(uint8_t stage) {
+  display.clearDisplay();
+  display.drawBitmap(0, 0, stage == 0 ? GREET_BDAY : GREET_FROM, GREET_BDAY_W, GREET_BDAY_H, SSD1306_WHITE);
+  display.display();
+}
+
+// Between the two screens: the panda's paw takes the cap off (about 1.2 s). Only the
+// panda's square is redrawn; screen 1's text stays until screen 2 replaces it.
+void uiGreetingHatOff() {
+  for (uint8_t i = 0; i < GREET_ANIM_COUNT; i++) {
+    display.fillRect(0, 0, GREET_ANIM_W, GREET_ANIM_H, SSD1306_BLACK);
+    display.drawBitmap(0, 0, GREET_ANIM_DATA[i], GREET_ANIM_W, GREET_ANIM_H, SSD1306_WHITE);
+    display.display();
+    delay(pgm_read_word(&GREET_ANIM_MS[i]));
+  }
 }
 
 // ---------- small pieces ----------
