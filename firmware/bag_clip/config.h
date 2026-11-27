@@ -62,6 +62,7 @@
 #define TAP_WINDOW_MS       400UL  // gap that ends a tap sequence
 #define LONG_PRESS_MS      1500UL  // hold to show the info screen
 #define INFO_SCREEN_MS     6000UL
+#define MENU_TIMEOUT_MS   30000UL  // the menu closes by itself after this long without a touch
 #define PAUSED_TO_PANDA_MS 10000UL // show the paused track this long, then the panda
 #define FRAME_MS             25UL  // ~40 fps cap; one full I2C frame takes ~23 ms at 400 kHz
 #define MAX_POLL_FAILURES      5   // then treat as "not playing" so the sleep timer runs

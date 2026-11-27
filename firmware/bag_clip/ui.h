@@ -2,6 +2,7 @@
 #pragma once
 #include <Arduino.h>
 #include "state.h"
+#include "dino.h"
 
 enum Screen : uint8_t {
   SCR_NOW_PLAYING,
@@ -24,5 +25,11 @@ void uiMessage(const char *line1, const char *line2 = nullptr, const char *line3
 // Idle panda: true freezes the animation on its resting picture (screen dimmed),
 // false restarts it from the beginning.
 void uiPandaRest(bool rest);
+// The menu's screens (menu.cpp decides when): each clears and draws the whole screen.
+void uiMenuList(const char *const *labels, int count, int selected);
+void uiMusic(const AppState &st);
+void uiDino(const DinoGame &g);
+void uiMotivation(const char *text, int number, int count);
+void uiBrightness(const char *const *names, int count, int selected);
 // Draws the screen if a new frame is due (frame rate is capped inside).
 void uiRender(Screen screen, const AppState &st, bool force = false);

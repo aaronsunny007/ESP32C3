@@ -55,8 +55,10 @@ TEXT_X, TEXT_W = 66, 61          # right half of the screen, 1 px margin
 SHOULDER = (200, 236)            # the arm grows from the body here (lower right)
 
 
-def panda(d):
-    """The panda without the cap, lit = white, on a 256x256 drawing."""
+def panda(d, eyes="open", mouth="smile"):
+    """The panda without the cap, lit = white, on a 256x256 drawing.
+    eyes: open, closed, left, right (where it looks). mouth: smile, open, chew.
+    The greeting uses the defaults; tools/draw_panda.py uses the rest for the idle panda."""
     def e(cx, cy, rx, ry, fill, outline=None, w=0):
         d.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], fill=fill, outline=outline, width=w)
 
@@ -64,10 +66,20 @@ def panda(d):
     e(52, 66, 32, 32, 0, 255, 9); e(204, 66, 32, 32, 0, 255, 9)  # ears: dark, lit outline
     e(128, 128, 94, 74, 255)                                     # head
     e(91, 128, 24, 30, 0); e(165, 128, 24, 30, 0)                # eye patches
-    e(92, 124, 9, 10, 255); e(164, 124, 9, 10, 255)              # eyes
+    if eyes == "closed":                                         # a lit curve in each patch
+        d.arc([78, 116, 106, 138], 20, 160, fill=255, width=7)
+        d.arc([150, 116, 178, 138], 20, 160, fill=255, width=7)
+    else:
+        dx = {"left": -8, "right": 8}.get(eyes, 0)
+        e(92 + dx, 124, 9, 10, 255); e(164 + dx, 124, 9, 10, 255)  # eyes
     e(128, 152, 13, 9, 0)                                        # nose
-    d.arc([104, 150, 128, 178], 20, 160, fill=0, width=8)        # smile
-    d.arc([128, 150, 152, 178], 20, 160, fill=0, width=8)
+    if mouth == "open":
+        e(128, 174, 9, 8, 0)
+    elif mouth == "chew":
+        d.line([(116, 170), (140, 170)], fill=0, width=7)
+    else:
+        d.arc([104, 150, 128, 178], 20, 160, fill=0, width=8)    # smile
+        d.arc([128, 150, 152, 178], 20, 160, fill=0, width=8)
     d.polygon([(128, 208), (88, 188), (88, 228)], fill=0)        # bow tie
     d.polygon([(128, 208), (168, 188), (168, 228)], fill=0)
     e(128, 208, 11, 13, 0)

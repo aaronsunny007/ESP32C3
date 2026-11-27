@@ -1,151 +1,109 @@
 #!/usr/bin/env python3
-"""Draws the default animated idle panda and writes it as a GIF.
+"""Draws the animated idle panda (the same panda as the birthday greeting) and writes it as a GIF.
 
     python3 tools/draw_panda.py                    # -> docs/images/panda_idle.gif (64x64)
                                                    #    docs/images/panda_idle_preview.gif (4x)
-    python3 tools/gif_to_frames.py docs/images/panda_idle.gif --rest 9
+                                                   #    docs/images/panda_poses.png
+    python3 tools/gif_to_frames.py docs/images/panda_idle.gif --rest 25
                                                    # -> firmware/bag_clip/panda_anim.h
 
-The panda blinks, waves, eats bamboo and dozes off. Each pose is drawn at 8x size and
-scaled down to 64x64 with a threshold, so it stays crisp on the 1-bit OLED.
+The panda looks around and blinks, waves, eats a stick of bamboo and dozes off. Every pose
+is drawn with panda() from tools/make_oled_panda.py (the greeting's panda) at 4x size and
+shrunk to 64x64 with a threshold, so the idle screen and the greeting are the same panda.
 Lit (white) pixels are the panda's white fur; black fur is unlit with a lit outline.
 
 Needs Pillow:  pip install pillow
 """
 import math
 import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
 from PIL import Image, ImageDraw
+from make_oled_panda import panda
 
-S = 8            # drawing scale
-N = 64           # final size
-
-
-class Pose:
-    def __init__(self):
-        self.im = Image.new("1", (N * S, N * S), 0)
-        self.d = ImageDraw.Draw(self.im)
-
-    def ell(self, cx, cy, rx, ry, fill):
-        self.d.ellipse([(cx - rx) * S, (cy - ry) * S, (cx + rx) * S, (cy + ry) * S], fill=fill)
-
-    def line(self, pts, width, fill):
-        self.d.line([(x * S, y * S) for x, y in pts], fill=fill, width=int(width * S), joint="curve")
-        r = width / 2
-        for x, y in (pts[0], pts[-1]):
-            self.ell(x, y, r, r, fill)
-
-    def limb(self, pts, width=6.0):
-        """A black arm/leg: lit outline, dark inside."""
-        self.line(pts, width + 2.6, 1)
-        self.line(pts, width, 0)
-
-    def bamboo(self, x0, y0, x1, y1, leaves=True):
-        self.line([(x0, y0), (x1, y1)], 5.4, 0)     # dark edge so it shows over white fur
-        self.line([(x0, y0), (x1, y1)], 3.2, 1)
-        n = max(1, int(math.hypot(x1 - x0, y1 - y0) // 6))
-        dx, dy = (x1 - x0), (y1 - y0)
-        L = math.hypot(dx, dy)
-        px, py = -dy / L, dx / L            # perpendicular
-        for i in range(1, n + 1):           # dark segment joints
-            t = i / (n + 1)
-            cx, cy = x0 + dx * t, y0 + dy * t
-            self.d.line([((cx - px * 1.7) * S, (cy - py * 1.7) * S),
-                         ((cx + px * 1.7) * S, (cy + py * 1.7) * S)], fill=0, width=int(0.9 * S))
-        if leaves:
-            for ang, ln in ((-0.9, 7), (0.5, 6)):
-                a = math.atan2(dy, dx) + ang
-                tip = (x1 + math.cos(a) * ln, y1 + math.sin(a) * ln)
-                self.line([(x1, y1), tip], 4.0, 0)
-                self.line([(x1, y1), tip], 2.2, 1)
-
-    def z(self, x, y, s):
-        w = 1.3
-        self.line([(x, y), (x + s, y)], w, 1)
-        self.line([(x + s, y), (x, y + s)], w, 1)
-        self.line([(x, y + s), (x + s, y + s)], w, 1)
-
-    def done(self):
-        small = self.im.convert("L").resize((N, N), Image.LANCZOS)
-        return small.point(lambda v: 255 if v > 110 else 0).convert("1")
+N = 64      # final size
+BIG = 256   # drawing size (make_oled_panda's space)
 
 
-def panda(eyes="open", arms="down", mouth="smile", bamboo=None, zs=0):
-    p = Pose()
-    # ears: lit ring, dark middle
-    for cx in (17, 47):
-        p.ell(cx, 9, 7, 7, 1)
-        p.ell(cx, 9, 4, 4, 0)
-    # body, with a dark gap so the head stands out
-    p.ell(32, 54, 18, 15, 1)
-    # legs
-    p.limb([(21, 62), (23, 66)], 7)
-    p.limb([(43, 62), (41, 66)], 7)
-    # arms
-    if arms == "down":
-        p.limb([(17, 44), (21, 55)])
-        p.limb([(47, 44), (43, 55)])
-    elif arms in ("wave1", "wave2"):
-        p.limb([(17, 44), (21, 55)])
-        tip = (58, 28) if arms == "wave1" else (61, 35)
-        p.limb([(46, 44), tip])
-    elif arms == "hold":
-        p.limb([(17, 44), (25, 47)])
-        p.limb([(47, 44), (39, 49)])
-    # head (dark ring first so it separates from ears and body)
-    p.ell(32, 23, 20, 17, 0)
-    p.ell(32, 23, 18, 15, 1)
-    # eye patches: tilted dark ovals
-    for sx in (1, -1):
-        patch = Image.new("1", (9 * S, 12 * S), 0)
-        ImageDraw.Draw(patch).ellipse([0, 0, 9 * S - 1, 12 * S - 1], fill=1)
-        patch = patch.rotate(35 * sx, expand=True)
-        cx, cy = 32 - 8 * sx, 22
-        p.im.paste(0, (int(cx * S - patch.width / 2), int(cy * S - patch.height / 2)), patch)
-        if eyes == "open":
-            p.ell(cx, cy, 2.4, 2.4, 1)
-            p.ell(cx - 0.6 * sx, cy - 0.8, 0.9, 0.9, 0)
-        else:  # closed: a little lit curve
-            p.d.arc([(cx - 3) * S, (cy - 2.5) * S, (cx + 3) * S, (cy + 2) * S], 20, 160, fill=1, width=int(1.3 * S))
-    # nose
-    p.ell(32, 29.5, 2.6, 1.7, 0)
-    if mouth == "smile":
-        p.d.arc([29 * S, 29.5 * S, 35 * S, 34.5 * S], 20, 160, fill=0, width=int(1.2 * S))
-    elif mouth == "open":
-        p.ell(32, 33.5, 2.4, 2.2, 0)
-    elif mouth == "chew":
-        p.line([(30, 33.5), (34, 33.5)], 1.1, 0)
-    if bamboo:
-        p.bamboo(*bamboo)
-        # paws over the stick
-        p.ell(25, 47, 3.4, 3.4, 1); p.ell(25, 47, 2.2, 2.2, 0)
-        p.ell(39, 49, 3.4, 3.4, 1); p.ell(39, 49, 2.2, 2.2, 0)
-    for i in range(zs):  # sleepy z's, growing up and to the right
-        s = 3.5 + i * 1.2
-        p.z((53, 56, 58.5)[i], (31, 23, 15)[i], s)
-    return p.done()
+def bamboo(d, x0, y0, x1, y1, leaves=True):
+    """A lit bamboo stick with a dark edge (so it shows over the white fur) and dark joints."""
+    d.line([(x0, y0), (x1, y1)], fill=0, width=34)
+    d.line([(x0, y0), (x1, y1)], fill=255, width=20)
+    dx, dy = x1 - x0, y1 - y0
+    length = math.hypot(dx, dy)
+    px, py = -dy / length, dx / length
+    n = max(1, int(length // 26))
+    for i in range(1, n + 1):
+        t = i / (n + 1)
+        cx, cy = x0 + dx * t, y0 + dy * t
+        d.line([(cx - px * 8, cy - py * 8), (cx + px * 8, cy + py * 8)], fill=0, width=4)
+    if leaves:
+        a0 = math.atan2(dy, dx)
+        for ang, ln in ((-0.9, 30), (0.55, 26)):
+            a = a0 + ang
+            tip = (x1 + math.cos(a) * ln, y1 + math.sin(a) * ln)
+            d.line([(x1, y1), tip], fill=0, width=17)
+            d.line([(x1, y1), tip], fill=255, width=8)
+
+
+def held_paw(d, x, y):
+    """A round paw holding the stick: dark with a lit ring."""
+    d.ellipse([x - 20, y - 20, x + 20, y + 20], fill=255)
+    d.ellipse([x - 13, y - 13, x + 13, y + 13], fill=0)
+
+
+def wave_paw(d, x, y):
+    """A short arm from the right shoulder straight up to a round paw beside the face."""
+    for width, fill in ((52, 255), (36, 0)):
+        d.line([(208, 236), (x, y)], fill=fill, width=width)
+    d.ellipse([x - 30, y - 30, x + 30, y + 30], fill=255)
+    d.ellipse([x - 22, y - 22, x + 22, y + 22], fill=0)
+    d.ellipse([x - 7, y - 12, x + 7, y + 2], fill=255)           # paw pad
+
+
+def zed(d, x, y, s):
+    w = max(4, int(s / 4))
+    d.line([(x, y), (x + s, y), (x, y + s), (x + s, y + s)], fill=255, width=w, joint="curve")
+
+
+def pose(eyes="open", mouth="smile", wave=None, stick=None, zs=0):
+    im = Image.new("L", (BIG, BIG), 0)
+    d = ImageDraw.Draw(im)
+    panda(d, eyes=eyes, mouth=mouth)
+    if wave:                               # the paw raised beside the face
+        wave_paw(d, *wave)
+    if stick:                              # bamboo from the lower left up to the mouth
+        bamboo(d, *stick)
+        held_paw(d, stick[0] + (stick[2] - stick[0]) * 0.35, stick[1] + (stick[3] - stick[1]) * 0.35)
+    for i in range(zs):                    # z's rising between the ears, where the cap sat
+        s = (16, 18, 20)[i]
+        zed(d, (98, 122, 148)[i], (34, 16, 0)[i], s)
+    return im.resize((N, N), Image.LANCZOS).point(lambda v: 255 if v >= 128 else 0).convert("1")
 
 
 def main():
     # unique poses (index = frame number in the header)
     poses = [
-        panda(),                                                    # 0 idle
-        panda(eyes="closed"),                                       # 1 blink
-        panda(arms="wave1"),                                        # 2 wave
-        panda(arms="wave2"),                                        # 3 wave
-        panda(arms="hold", mouth="open", bamboo=(22, 54, 38, 26)),  # 4 bite (long stick)
-        panda(arms="hold", mouth="chew", bamboo=(22, 54, 37, 29)),  # 5 chew
-        panda(arms="hold", mouth="open", bamboo=(22, 54, 33, 34, False)),  # 6 bite (shorter)
-        panda(arms="hold", mouth="chew", bamboo=(22, 54, 30, 40, False)),  # 7 chew (stub)
-        panda(eyes="closed", zs=1),                                 # 8 sleep z
-        panda(eyes="closed", zs=2),                                 # 9 sleep zz
-        panda(eyes="closed", zs=3),                                 # 10 sleep zzz
+        pose(),                                                   # 0 idle
+        pose(eyes="closed"),                                      # 1 blink
+        pose(eyes="left"),                                        # 2 looks left
+        pose(eyes="right"),                                       # 3 looks right
+        pose(wave=(222, 150)),                                    # 4 wave, paw out
+        pose(wave=(224, 112)),                                    # 5 wave, paw up
+        pose(mouth="open", stick=(70, 256, 120, 180, False)),     # 6 bite (long stick)
+        pose(mouth="chew", stick=(70, 256, 108, 200, False)),     # 7 chew (shorter)
+        pose(eyes="closed", zs=1),                                # 8 sleep z
+        pose(eyes="closed", zs=2),                                # 9 sleep zz
+        pose(eyes="closed", zs=3),                                # 10 sleep zzz
     ]
     # (pose, ms) - the order it plays in
-    seq = [(0, 1600), (1, 150), (0, 900),
-           (2, 220), (3, 220), (2, 220), (3, 220), (2, 220), (0, 800),
-           (4, 350), (5, 300), (4, 300), (5, 300), (6, 350), (7, 300), (6, 300), (7, 400), (0, 1000),
+    seq = [(0, 1600), (2, 700), (0, 300), (3, 700), (0, 400), (1, 150), (0, 700),
+           (4, 220), (5, 220), (4, 220), (5, 220), (4, 220), (0, 800),
+           (6, 350), (7, 300), (6, 300), (7, 300), (6, 350), (7, 400), (0, 1000),
            (1, 150), (0, 500), (1, 150), (0, 400),
-           (1, 600), (8, 600), (9, 600), (10, 900), (8, 600), (9, 600), (10, 900), (1, 500), (0, 900)]
+           (1, 600), (8, 600), (9, 600), (10, 900), (8, 600), (9, 600), (10, 900), (1, 500)]
     frames = [poses[i] for i, _ in seq]
     durs = [ms for _, ms in seq]
     out = os.path.join(os.path.dirname(__file__), "..", "docs", "images")
