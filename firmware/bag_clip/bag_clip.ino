@@ -15,7 +15,9 @@
  *
  * Touch pad (TTP223 on GPIO3):
  *   1 tap -> play / pause    2 taps -> next    3 taps -> previous
- *   hold 1.5 s -> info screen (battery, phone, version)
+ *   hold 1.5 s -> the menu: Music player, Dino game, Motivation, Show greeting,
+ *                 Brightness, Info, Power off, Exit (menu.cpp). In the menu a tap moves
+ *                 to the next item, a hold chooses it; inside an item a hold goes back.
  *   tap while asleep -> wake
  *   at switch-on: greeting screens ("Hpy bday Kusuma." with the cap on -> the paw takes
  *   the cap off -> "From your lovely panda"); GREETING_ENABLED in config.h
@@ -30,11 +32,13 @@
 #include "ui.h"
 #include "ble_link.h"
 #include "wifi_link.h"
+#include "menu.h"
 
 static unsigned long lastActivity = 0, idleScreenSince = 0, lastPlayingAt = 0, infoUntil = 0;
 static unsigned long pressStart = 0, lastTapTime = 0;
 static int tapCount = 0;
 static bool lastTouch = false, longFired = false, ignoreUntilRelease = false;
+static bool pressTaken = false;      // the dino game used this press as a jump: not a tap
 static Screen lastScreen = SCR_PANDA;
 
 // Power-on greeting, one tap per screen: 0 = birthday, 1 = "from your panda", 2 = done.
@@ -107,6 +111,18 @@ static void dispatchCommand(Command c) {
   }
 }
 
+// Does what the menu asked for after a touch or a timeout.
+static void handleMenu(MenuAction a) {
+  switch (a) {
+    case MENU_CLOSED: forceRedraw = true; break;
+    case MENU_SEND: sendCommand(menuCommand()); break;
+    case MENU_GREETING: greetStage = 0; greetShown = -1; break;   // the loop draws it again
+    case MENU_INFO: infoUntil = millis() + INFO_SCREEN_MS; forceRedraw = true; break;
+    case MENU_POWER_OFF: enterDeepSleep("Power off", "Tap to turn on"); break;
+    default: break;
+  }
+}
+
 static void handleTouch() {
   bool down = digitalRead(TOUCH_PIN) == HIGH;
   unsigned long now = millis();
@@ -118,14 +134,22 @@ static void handleTouch() {
   if (down && !lastTouch) {
     pressStart = now;
     longFired = false;
+    pressTaken = false;
     markActivity();
+    if (menuActive() && menuTakesPress()) { menuPress(); pressTaken = true; }   // the dino jumps at once
   }
   if (down && !longFired && now - pressStart > LONG_PRESS_MS) {
     longFired = true;
     tapCount = 0;
-    infoUntil = now + INFO_SCREEN_MS;
+    if (greetStage < GREET_DONE) {
+      // the greeting only listens to taps
+    } else if (menuActive()) {
+      handleMenu(menuHold());
+    } else {
+      menuOpen();
+    }
   }
-  if (!down && lastTouch && !longFired && now - pressStart > 30) {   // 30 ms debounce
+  if (!down && lastTouch && !longFired && !pressTaken && now - pressStart > 30) {   // 30 ms debounce
     tapCount++;
     lastTapTime = now;
   }
@@ -139,7 +163,8 @@ static void handleTouch() {
       markActivity();
       return;
     }
-    sendCommand(tapCount == 1 ? CMD_TOGGLE : tapCount == 2 ? CMD_NEXT : CMD_PREV);
+    if (menuActive()) handleMenu(menuTaps(tapCount));
+    else sendCommand(tapCount == 1 ? CMD_TOGGLE : tapCount == 2 ? CMD_NEXT : CMD_PREV);
     tapCount = 0;
     markActivity();
   }
@@ -230,6 +255,16 @@ void loop() {
     return;
   }
   greetShown = -1;   // a PIN covered the greeting: draw it again afterwards
+
+  // The menu draws its own screens. A pairing PIN or a firmware update still shows over it.
+  if (menuActive() && !st.blePasskey && !st.otaActive) {
+    uiSetContrast(settings.brightness);
+    handleMenu(menuLoop(st));
+    lastActivity = now;   // no sleep while the menu is open; it closes itself after MENU_TIMEOUT_MS
+    if (batteryCritical()) enterDeepSleep("Battery low", "Charge or switch off");
+    delay(5);
+    return;
+  }
 
   Screen screen = pickScreen(st);
   bool changed = screen != lastScreen || forceRedraw;

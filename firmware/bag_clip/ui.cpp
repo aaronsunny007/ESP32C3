@@ -394,3 +394,194 @@ void uiRender(Screen screen, const AppState &st, bool force) {
   }
   display.display();
 }
+
+// ---------- menu screens (menu.cpp says when to draw them) ----------
+// Every menu screen has the same title bar: white, the name on the left, a hint or a
+// count on the right in black.
+static void menuHeader(const char *left, const char *right) {
+  display.fillRect(0, 0, SCREEN_WIDTH, 11, SSD1306_WHITE);
+  display.setTextColor(SSD1306_BLACK);
+  display.setCursor(3, 2);
+  display.print(left);
+  if (right) {
+    display.setCursor(SCREEN_WIDTH - 3 - strlen(right) * 6, 2);
+    display.print(right);
+  }
+  display.setTextColor(SSD1306_WHITE);
+}
+
+static void drawToast(const AppState &st) {
+  if (st.toast[0] && (long)(millis() - st.toastUntil) < 0) {
+    display.fillRoundRect(4, 22, SCREEN_WIDTH - 8, 20, 4, SSD1306_BLACK);
+    display.drawRoundRect(4, 22, SCREEN_WIDTH - 8, 20, 4, SSD1306_WHITE);
+    centered(st.toast, 28);
+  }
+}
+
+void uiMenuList(const char *const *labels, int count, int selected) {
+  display.clearDisplay();
+  menuHeader("Menu", "hold = OK");
+  const int rows = 4, rowH = 13, top = 13;
+  int first = constrain(selected - 1, 0, max(0, count - rows));
+  for (int r = 0; r < rows && first + r < count; r++) {
+    int i = first + r, y = top + r * rowH;
+    if (i == selected) {
+      display.fillRoundRect(0, y, SCREEN_WIDTH - 6, rowH - 1, 3, SSD1306_WHITE);
+      display.setTextColor(SSD1306_BLACK);
+    }
+    display.setCursor(5, y + 2);
+    display.print(labels[i]);
+    display.setTextColor(SSD1306_WHITE);
+  }
+  // scroll bar: where the four rows sit in the whole list
+  int trackH = rows * rowH - 1, thumbH = max(6, trackH * rows / count);
+  int thumbY = top + (trackH - thumbH) * first / max(1, count - rows);
+  for (int y = top; y < top + trackH; y += 2) display.drawPixel(SCREEN_WIDTH - 2, y, SSD1306_WHITE);
+  display.fillRect(SCREEN_WIDTH - 3, thumbY, 3, thumbH, SSD1306_WHITE);
+  display.display();
+}
+
+void uiMusic(const AppState &st) {
+  display.clearDisplay();
+  menuHeader("Music", "hold = back");
+  if (!st.hasTrack) {
+    centered("Nothing playing", 20);
+    centered("Play a song on", 34);
+    centered("your phone", 44);
+  } else {
+    if (st.trackVersion != shownTrackVersion) { shownTrackVersion = st.trackVersion; scrollStart = millis(); }
+    int speed = SCROLL_PX_PER_S[constrain(settings.scrollSpeed, 1, 5)];
+    drawMarquee(st.title, 0, 14, speed);
+    drawMarquee(st.artist, 0, 24, speed);
+    // previous | play or pause | next, the middle one larger
+    display.fillRect(22, 36, 2, 9, SSD1306_WHITE);
+    display.fillTriangle(33, 36, 33, 44, 25, 40, SSD1306_WHITE);
+    if (st.playing) {
+      display.fillRect(58, 35, 4, 11, SSD1306_WHITE);
+      display.fillRect(66, 35, 4, 11, SSD1306_WHITE);
+    } else {
+      display.fillTriangle(59, 34, 59, 46, 70, 40, SSD1306_WHITE);
+    }
+    display.fillTriangle(95, 36, 95, 44, 103, 40, SSD1306_WHITE);
+    display.fillRect(104, 36, 2, 9, SSD1306_WHITE);
+    // progress as a thin line
+    bool knownLength = st.durationMs > 1;
+    long shown = st.progressMs + (st.playing ? (long)(millis() - st.progressStamp) : 0);
+    if (knownLength) {
+      int w = (int)((int64_t)constrain(shown, 0L, st.durationMs) * SCREEN_WIDTH / st.durationMs);
+      display.drawFastHLine(0, 50, SCREEN_WIDTH, SSD1306_WHITE);
+      display.fillRect(0, 49, w, 3, SSD1306_WHITE);
+    }
+  }
+  display.setCursor(4, 56);
+  display.print("1:play 2:next 3:prev");
+  drawToast(st);
+  display.display();
+}
+
+// The dino, 16x16, two leg pictures for running.
+static const char *const DINO_ROWS[16] = {
+  "........#######.", ".......##.######", ".......#########", ".......#########",
+  ".......#####....", ".......#######..", "#.....######....", "#....#######....",
+  "##..##########..", "###########.#...", ".#########......", "..########......",
+  "...######.......", "....##.##.......", "....#...#.......", "....##..##......",
+};
+static const char *const DINO_LEGS_B[3] = {"....##.##.......", "....##..#.......", ".......###......"};
+
+static void drawDino(int x, int y, bool legsB) {
+  for (int r = 0; r < 16; r++) {
+    const char *row = (legsB && r >= 13) ? DINO_LEGS_B[r - 13] : DINO_ROWS[r];
+    for (int c = 0; c < 16; c++)
+      if (row[c] == '#') display.drawPixel(x + c, y + r, SSD1306_WHITE);
+  }
+}
+
+void uiDino(const DinoGame &g) {
+  const int ground = 60;
+  display.clearDisplay();
+  int run = (int)g.distance;
+  for (int x = 0; x < SCREEN_WIDTH; x++)   // the ground, with small stones moving past
+    if (((x + run) % 9) < 7) display.drawPixel(x, ground, SSD1306_WHITE);
+  for (int i = 0; i < 4; i++) display.drawPixel((SCREEN_WIDTH - ((run / 2 + i * 37) % SCREEN_WIDTH)), ground + 2, SSD1306_WHITE);
+  for (const auto &c : g.cacti) {
+    if (!c.used) continue;
+    int x = (int)c.x, trunk = max(3, (int)c.w - 4), tx = x + (c.w - trunk) / 2;
+    display.fillRect(tx, ground - c.h, trunk, c.h, SSD1306_WHITE);
+    display.fillRect(x, ground - c.h + 3, 2, 5, SSD1306_WHITE);            // left arm
+    display.fillRect(x, ground - c.h + 7, tx - x, 2, SSD1306_WHITE);
+    display.fillRect(x + c.w - 2, ground - c.h + 5, 2, 4, SSD1306_WHITE);  // right arm
+    display.fillRect(tx + trunk, ground - c.h + 8, x + c.w - tx - trunk, 2, SSD1306_WHITE);
+  }
+  bool onGround = g.y < 0.5f;
+  drawDino(8, ground - 16 - (int)g.y, onGround && g.phase == DinoGame::RUNNING && (run / 6) % 2);
+  char buf[24];
+  snprintf(buf, sizeof(buf), "HI %05lu %05lu", (unsigned long)dinoHighScore, (unsigned long)g.score());
+  display.setCursor(SCREEN_WIDTH - strlen(buf) * 6, 0);
+  display.print(buf);
+  if (g.phase == DinoGame::READY) {
+    centered("Tap to jump", 18);
+    centered("hold = back", 30);
+  } else if (g.phase == DinoGame::OVER) {
+    display.fillRoundRect(14, 14, SCREEN_WIDTH - 28, 26, 4, SSD1306_BLACK);
+    display.drawRoundRect(14, 14, SCREEN_WIDTH - 28, 26, 4, SSD1306_WHITE);
+    centered("Game over", 18);
+    centered("tap: again", 29);
+  }
+  display.display();
+}
+
+// Breaks text into lines of at most 21 characters at spaces; returns how many lines.
+static int wrapLines(const char *text, char lines[][22], int maxLines) {
+  int n = 0;
+  const char *p = text;
+  while (*p && n < maxLines) {
+    while (*p == ' ') p++;
+    int len = strlen(p);
+    int take = len <= 21 ? len : 21;
+    if (len > 21) {
+      int cut = take;
+      while (cut > 0 && p[cut] != ' ') cut--;
+      if (cut > 0) take = cut;
+    }
+    memcpy(lines[n], p, take);
+    lines[n][take] = 0;
+    n++;
+    p += take;
+  }
+  return n;
+}
+
+void uiMotivation(const char *text, int number, int count) {
+  display.clearDisplay();
+  char right[8];
+  snprintf(right, sizeof(right), "%d/%d", number, count);
+  menuHeader("Motivation", right);
+  char lines[4][22];
+  int n = wrapLines(text, lines, 4);
+  int y = 14 + (40 - n * 10) / 2;
+  for (int i = 0; i < n; i++) centered(lines[i], y + i * 10);
+  display.setCursor(0, 56);
+  display.print("tap: next hold: back");
+  display.display();
+}
+
+void uiBrightness(const char *const *names, int count, int selected) {
+  display.clearDisplay();
+  menuHeader("Brightness", nullptr);
+  int w = 38, gap = 4, x0 = (SCREEN_WIDTH - count * w - (count - 1) * gap) / 2;
+  for (int i = 0; i < count; i++) {
+    int x = x0 + i * (w + gap);
+    if (i == selected) {
+      display.fillRoundRect(x, 20, w, 18, 3, SSD1306_WHITE);
+      display.setTextColor(SSD1306_BLACK);
+    } else {
+      display.drawRoundRect(x, 20, w, 18, 3, SSD1306_WHITE);
+    }
+    display.setCursor(x + (w - strlen(names[i]) * 6) / 2, 25);
+    display.print(names[i]);
+    display.setTextColor(SSD1306_WHITE);
+  }
+  display.setCursor(1, 52);
+  display.print("tap change  hold save");
+  display.display();
+}

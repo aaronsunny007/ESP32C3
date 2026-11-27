@@ -208,7 +208,7 @@ A voltage divider halves the battery voltage (max 4.2 V → 2.1 V) so the ESP32-
 - Taking it after the switch means the divider draws nothing when the clip is switched off. While on, it draws ~20 µA, which is small next to the clip itself.
 - Switch off and USB in the ESP32: the divider has no power, so the clip simply hides the battery icon. Switch on and USB in: the board runs from USB (the diode blocks the battery) and the icon shows the battery's charge.
 - **Switch the reading on:** set `BATT_FITTED 1` in `config.h` and flash again. Until then the clip ignores GPIO 4 (no battery icon, no low-battery shutdown).
-- **Calibrate once:** hold the touch pad for 1.5 s to open the info screen, compare "Batt x.xx V" with a multimeter on the battery, and set `BATT_CAL` in `config.h` to *real ÷ shown* (e.g. 4.02 / 3.95 = 1.018).
+- **Calibrate once:** hold the touch pad for 1.5 s to open the menu and choose Info, compare "Batt x.xx V" with a multimeter on the battery, and set `BATT_CAL` in `config.h` to *real ÷ shown* (e.g. 4.02 / 3.95 = 1.018).
 - Below ~3.5 V (battery) the board's regulator starts to brown out after the diode drop, so the clip shows "Battery low / Charge or switch off" and sleeps. **Switch it off** (or charge it): even asleep the board keeps drawing a little, and a flat LiPo left on keeps draining.
 - Using different resistors: set `BATT_DIVIDER` in `config.h` to (R1 + R2) ÷ R2. Keep the pin voltage under 2.5 V.
 
@@ -371,14 +371,20 @@ Then look at `docs/images/greeting_1_preview.png`, `greeting_2_preview.png` and 
 | Greeting | At switch-on: panda in its cap with "Hpy bday Kusuma.", tap, the panda's paw takes the cap off, then "From your lovely panda", tap, then the normal screens. Survives sleep; starts over only after switching off and on. See "Editing the greeting" |
 | Set me up! | Never paired: open the app and tap Find my clip |
 | Bluetooth PIN | While your phone pairs |
-| Info | Hold the pad 1.5 s: version, phone link, which app is playing, phone battery, clip battery voltage |
+| Menu | Hold the pad 1.5 s. Tap moves to the next item, hold chooses it; inside an item, hold goes back. Closes by itself after 30 s untouched |
+| Music player | Menu: the song, play/pause, previous and next; 1 tap play/pause, 2 taps next, 3 taps previous (the music plays on the phone) |
+| Dino game | Menu: tap to jump over the cacti; the high score is kept until the clip is switched off |
+| Motivation | Menu: one line at a time, tap for the next. Edit the lines in `firmware/bag_clip/motivation.h` |
+| Brightness | Menu: tap through Low / Medium / High, hold to save |
+| Info | Menu: version, phone link, which app is playing, phone battery, clip battery voltage |
+| Power off | Menu: deep sleep straight away (tap to turn on). The slide switch cuts the power completely |
 | Messages | Short pop-ups: "Next", "Previous", "Phone not connected", "Open the Bag Clip app" |
 | Wi-Fi mode only | Connecting / no Wi-Fi / Spotify error screens, OTA progress bar |
 
 ## Pre-flight checklist (do in order, before closing the case)
 
 - [ ] **1. USB & board:** plug in, select ESP32C3 Dev Module + USB CDC On Boot Enabled + Minimal SPIFFS partition, upload a blink/serial test. COM port shows up, upload clean.
-- [ ] **2. OLED & touch:** jumper-wire OLED + TTP223, flash `bag_clip` (with `BATT_FITTED 0`, the default). OLED shows "Bag Clip v3.0.1" then "Set me up!"; TTP223 LED lights when touched; holding it 1.5 s shows the info screen.
+- [ ] **2. OLED & touch:** jumper-wire OLED + TTP223, flash `bag_clip` (with `BATT_FITTED 0`, the default). OLED shows "Bag Clip v3.0.1" then "Set me up!"; TTP223 LED lights when touched; holding it 1.5 s opens the menu (tap to move, hold to choose).
 - [ ] **3. App + Bluetooth:** install the app, do its three steps (PIN on the OLED), play a song in Spotify. Title, artist, album art and times within ~1 s; long titles scroll smoothly. Turn the phone screen off: the clip keeps updating. Hotspot and Wi-Fi can stay off.
 - [ ] **4. Touch, dim & sleep:** 1 tap pauses/plays, 2 taps skip, 3 taps go back (on the phone, within ~0.5 s). Pause: animated panda after 10 s (blinks, waves, eats bamboo, smooth with no stutter), dims and freezes on the "zzz" picture after 8 s more, sleeps after 5 min. A tap while dimmed restarts the animation at full brightness. Tap → wakes, and the app reconnects within a few seconds.
 - [ ] **5. Battery:** USB unplugged, solder LiPo + TP4056 + switch + diode (stripe towards the ESP32) + the two resistors, remove the power LED (Step B3), set `BATT_FITTED 1` and flash, switch ON. Nothing warm, boots on battery, battery % shows; calibrate `BATT_CAL` against a multimeter. TP4056 LED red while charging / blue when full. Then plug USB into the ESP32 with the switch ON: the clip keeps running and nothing gets warm (the diode is doing its job).
