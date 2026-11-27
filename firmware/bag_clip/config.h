@@ -3,6 +3,10 @@
 #include <Arduino.h>
 
 #define FW_VERSION   "3.0.1"
+
+// Birthday greeting at switch-on (pictures, text and animation: tools/make_oled_panda.py).
+// 1 = show it, 0 = skip it and start straight on the normal screens.
+#define GREETING_ENABLED 1
 #define DEVICE_NAME  "BagClip"     // Bluetooth name, and http://bagclip.local on Wi-Fi
 #define MDNS_NAME    "bagclip"
 

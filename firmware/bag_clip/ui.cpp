@@ -69,30 +69,23 @@ void uiMessage(const char *l1, const char *l2, const char *l3) {
   display.display();
 }
 
-// Power-on greeting: 0 = "Hpy bday Kusuma." (panda wears its cap), 1 = "From your lovely panda".
-// Pictures come from tools/make_oled_panda.py (greeting_img.h).
-static void drawHat(int x, int y) {
-  // Clear the cap's outline first so the panda's ears don't show through it.
-  display.drawBitmap(x, y, GREET_HAT_MASK, GREET_HAT_MASK_W, GREET_HAT_MASK_H, SSD1306_BLACK);
-  display.drawBitmap(x, y, GREET_HAT, GREET_HAT_W, GREET_HAT_H, SSD1306_WHITE);
-}
-
+// Power-on greeting: 0 = "Hpy bday Kusuma." (panda in its cap), 1 = "From your lovely panda".
+// The pictures and the animation come from tools/make_oled_panda.py (greeting_img.h):
+// change the text or the animation there, not here.
 void uiGreeting(uint8_t stage) {
   display.clearDisplay();
   display.drawBitmap(0, 0, stage == 0 ? GREET_BDAY : GREET_FROM, GREET_BDAY_W, GREET_BDAY_H, SSD1306_WHITE);
-  if (stage == 0) drawHat(GREET_HAT_X, GREET_HAT_Y);
   display.display();
 }
 
-// Between the two screens: the cap lifts off the panda's head and floats up and away
-// (about 0.6 s, speeding up), then screen 2 follows.
+// Between the two screens: the panda's paw takes the cap off (about 1.2 s). Only the
+// panda's square is redrawn; screen 1's text stays until screen 2 replaces it.
 void uiGreetingHatOff() {
-  for (int i = 1; i <= 14; i++) {
-    display.clearDisplay();
-    display.drawBitmap(0, 0, GREET_BDAY, GREET_BDAY_W, GREET_BDAY_H, SSD1306_WHITE);
-    drawHat(GREET_HAT_X + i, GREET_HAT_Y - (i * i) / 6);
+  for (uint8_t i = 0; i < GREET_ANIM_COUNT; i++) {
+    display.fillRect(0, 0, GREET_ANIM_W, GREET_ANIM_H, SSD1306_BLACK);
+    display.drawBitmap(0, 0, GREET_ANIM_DATA[i], GREET_ANIM_W, GREET_ANIM_H, SSD1306_WHITE);
     display.display();
-    delay(40);
+    delay(pgm_read_word(&GREET_ANIM_MS[i]));
   }
 }
 

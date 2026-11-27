@@ -17,8 +17,8 @@
  *   1 tap -> play / pause    2 taps -> next    3 taps -> previous
  *   hold 1.5 s -> info screen (battery, phone, version)
  *   tap while asleep -> wake
- *   at switch-on: greeting screens ("Hpy bday Kusuma." with the cap on -> the cap lifts
- *   off -> "From your lovely panda"),
+ *   at switch-on: greeting screens ("Hpy bday Kusuma." with the cap on -> the paw takes
+ *   the cap off -> "From your lovely panda"); GREETING_ENABLED in config.h
  *   one tap each, then the clip works as above
  */
 
@@ -41,7 +41,7 @@ static Screen lastScreen = SCR_PANDA;
 // Kept in RTC memory, so it survives deep sleep (a tap wakes it on the same screen) and
 // starts again from the first screen only when the clip is switched off and on.
 #define GREET_DONE 2
-RTC_DATA_ATTR static uint8_t greetStage = 0;
+RTC_DATA_ATTR static uint8_t greetStage = GREETING_ENABLED ? 0 : GREET_DONE;
 static int8_t greetShown = -1;        // which greeting screen is on the OLED right now
 static bool forceRedraw = false;      // repaint the normal screen once the greeting ends
 
@@ -180,7 +180,7 @@ void setup() {
   settingsBegin();
   stateBegin();
   uiBegin();
-  if (!wokeFromTouch) greetStage = 0;   // switched on: the greeting starts from the top
+  if (!wokeFromTouch) greetStage = GREETING_ENABLED ? 0 : GREET_DONE;   // switched on: start from the top
   if (greetStage < GREET_DONE) {
     uiGreeting(greetStage);
     greetShown = greetStage;
@@ -216,7 +216,7 @@ void loop() {
   // pairing PIN is allowed to cover them (the phone needs to see it).
   if (greetStage < GREET_DONE && !st.blePasskey) {
     if (greetShown != greetStage) {
-      if (greetShown == 0 && greetStage == 1) uiGreetingHatOff();   // the tap takes the cap off
+      if (greetShown == 0 && greetStage == 1) uiGreetingHatOff();   // the paw takes the cap off
       greetShown = greetStage;
       uiSetContrast(settings.brightness);
       uiGreeting(greetStage);
