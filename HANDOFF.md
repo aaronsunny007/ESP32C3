@@ -11,6 +11,7 @@ ESP32-C3 "Now Playing" bag clip: 0.96" OLED shows the song playing on the phone;
 - **Branch `claude/clip-menu` (NOT merged yet, builds green):**
   - Idle panda redrawn as the birthday panda (`tools/draw_panda.py` -> `gif_to_frames.py --rest 27`).
   - **Menu**: hold 1.5 s opens it; tap = next item, hold = choose, hold inside an item = back; closes after 30 s. Items: Music player, Dino game, Motivation (random line, edit `motivation.h`), Show greeting, Brightness, Info, Power off (deep sleep), Exit. Code: `menu.cpp`, `dino.cpp`, `motivation.h`, drawing in `ui.cpp`.
+  - **Music player screen** (redesigned): title + artist on top, panda with headphones (`music_img.h` from `tools/make_music_panda.py`, eyes closed and nodding while playing), spinning record, big buttons, progress line, hint alternating with "hold: back to menu".
   - Next step: user says "merge" -> open PR into `claude/project-thread-q67a4a` and merge when CI is green.
 - **Screen previews without hardware:** compile `firmware/bag_clip/ui.cpp` (+ menu/dino) on Linux against Adafruit-GFX with stub Arduino/SSD1306 headers that dump the 128x64 buffer (rebuild the stubs if needed; min/max stubs must return by value).
 

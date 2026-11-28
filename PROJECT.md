@@ -372,7 +372,7 @@ Then look at `docs/images/greeting_1_preview.png`, `greeting_2_preview.png` and 
 | Set me up! | Never paired: open the app and tap Find my clip |
 | Bluetooth PIN | While your phone pairs |
 | Menu | Hold the pad 1.5 s. Tap moves to the next item, hold chooses it; inside an item, hold goes back. Closes by itself after 30 s untouched |
-| Music player | Menu: the song, play/pause, previous and next; 1 tap play/pause, 2 taps next, 3 taps previous (the music plays on the phone) |
+| Music player | Menu: the song and artist, the panda with headphones (nods along, eyes closed, while a song plays), a record that spins while playing, big previous / play-pause / next buttons and a progress line; 1 tap play/pause, 2 taps next, 3 taps previous (the music plays on the phone). Panda: `tools/make_music_panda.py` writes `music_img.h`; layout numbers at the top of `uiMusic()` in `ui.cpp` |
 | Dino game | Menu: tap to jump over the cacti; the high score is kept until the clip is switched off |
 | Motivation | Menu: one line at a time, tap for the next. Edit the lines in `firmware/bag_clip/motivation.h` |
 | Brightness | Menu: tap through Low / Medium / High, hold to save |

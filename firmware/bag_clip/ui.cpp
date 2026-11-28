@@ -7,6 +7,7 @@
 #include "settings.h"
 #include "panda_anim.h"
 #include "greeting_img.h"
+#include "music_img.h"
 #include "ble_link.h"
 #if WIFI_MODE
 #include <WiFi.h>
@@ -441,40 +442,79 @@ void uiMenuList(const char *const *labels, int count, int selected) {
   display.display();
 }
 
+// The Music player (menu -> Music player). Top: title and artist, scrolling when long.
+// Middle: the panda with headphones (tools/make_music_panda.py), a record that spins
+// while the song plays, and previous | play or pause | next. Bottom: progress and a hint.
+// Change the layout with these numbers:
+static const int MUSIC_PANDA_X = 0, MUSIC_PANDA_Y = 18;   // 32x32 picture
+static const int DISC_X = 52, DISC_Y = 34, DISC_R = 13;   // the record's centre and size
+static const float DISC_TURN_PER_S = 3.5f;                // radians a second (about one turn in 1.8 s)
+static const unsigned long BOB_MS = 400;                  // the panda nods to the beat this often
+static const unsigned long HINT_SWAP_MS = 3000;           // the bottom hint changes this often
+
+static float discAngle = 0;
+static unsigned long discMs = 0;
+
+static void drawDisc(bool spinning) {
+  unsigned long now = millis();
+  if (spinning) discAngle += DISC_TURN_PER_S * (float)min(now - discMs, 200UL) / 1000.0f;
+  discMs = now;
+  display.fillCircle(DISC_X, DISC_Y, DISC_R, SSD1306_WHITE);
+  display.drawCircle(DISC_X, DISC_Y, DISC_R - 3, SSD1306_BLACK);   // grooves
+  display.drawCircle(DISC_X, DISC_Y, DISC_R - 6, SSD1306_BLACK);
+  // two dark wedges across the record: they turn, so it looks like it spins
+  const float half = 0.3f, r = DISC_R - 1;
+  for (int k = 0; k < 2; k++) {
+    float a = discAngle + k * PI;
+    display.fillTriangle(DISC_X, DISC_Y,
+                         DISC_X + cos(a - half) * r, DISC_Y + sin(a - half) * r,
+                         DISC_X + cos(a + half) * r, DISC_Y + sin(a + half) * r, SSD1306_BLACK);
+  }
+  display.fillCircle(DISC_X, DISC_Y, 3, SSD1306_BLACK);           // label with the hole
+  display.drawPixel(DISC_X, DISC_Y, SSD1306_WHITE);
+}
+
+static void drawMusicButtons(bool playing) {
+  const int y = DISC_Y;                                        // centre line of the buttons
+  display.fillRect(72, y - 6, 2, 13, SSD1306_WHITE);           // |<  previous
+  display.fillTriangle(83, y - 6, 83, y + 6, 75, y, SSD1306_WHITE);
+  if (playing) {                                               // ||  pause (big)
+    display.fillRoundRect(92, y - 8, 5, 17, 1, SSD1306_WHITE);
+    display.fillRoundRect(100, y - 8, 5, 17, 1, SSD1306_WHITE);
+  } else {                                                     // >   play (big)
+    display.fillTriangle(92, y - 9, 92, y + 9, 106, y, SSD1306_WHITE);
+  }
+  display.fillTriangle(114, y - 6, 114, y + 6, 122, y, SSD1306_WHITE);   // >|  next
+  display.fillRect(123, y - 6, 2, 13, SSD1306_WHITE);
+}
+
 void uiMusic(const AppState &st) {
   display.clearDisplay();
-  menuHeader("Music", "hold = back");
-  if (!st.hasTrack) {
-    centered("Nothing playing", 20);
-    centered("Play a song on", 34);
-    centered("your phone", 44);
-  } else {
+  bool playing = st.hasTrack && st.playing;
+  if (st.hasTrack) {
     if (st.trackVersion != shownTrackVersion) { shownTrackVersion = st.trackVersion; scrollStart = millis(); }
     int speed = SCROLL_PX_PER_S[constrain(settings.scrollSpeed, 1, 5)];
-    drawMarquee(st.title, 0, 14, speed);
-    drawMarquee(st.artist, 0, 24, speed);
-    // previous | play or pause | next, the middle one larger
-    display.fillRect(22, 36, 2, 9, SSD1306_WHITE);
-    display.fillTriangle(33, 36, 33, 44, 25, 40, SSD1306_WHITE);
-    if (st.playing) {
-      display.fillRect(58, 35, 4, 11, SSD1306_WHITE);
-      display.fillRect(66, 35, 4, 11, SSD1306_WHITE);
-    } else {
-      display.fillTriangle(59, 34, 59, 46, 70, 40, SSD1306_WHITE);
-    }
-    display.fillTriangle(95, 36, 95, 44, 103, 40, SSD1306_WHITE);
-    display.fillRect(104, 36, 2, 9, SSD1306_WHITE);
-    // progress as a thin line
-    bool knownLength = st.durationMs > 1;
-    long shown = st.progressMs + (st.playing ? (long)(millis() - st.progressStamp) : 0);
-    if (knownLength) {
-      int w = (int)((int64_t)constrain(shown, 0L, st.durationMs) * SCREEN_WIDTH / st.durationMs);
-      display.drawFastHLine(0, 50, SCREEN_WIDTH, SSD1306_WHITE);
-      display.fillRect(0, 49, w, 3, SSD1306_WHITE);
-    }
+    drawMarquee(st.title, 0, 0, speed);
+    drawMarquee(st.artist, 0, 9, speed);
+  } else {
+    display.setCursor(0, 0); display.print("Nothing playing");
+    display.setCursor(0, 9); display.print("Start a song on phone");
   }
-  display.setCursor(4, 56);
-  display.print("1:play 2:next 3:prev");
+
+  bool nodUp = playing && (millis() / BOB_MS) % 2;
+  display.drawBitmap(MUSIC_PANDA_X, MUSIC_PANDA_Y - (nodUp ? 1 : 0), playing ? MUSIC_PANDA_VIBE : MUSIC_PANDA_WAIT,
+                     MUSIC_PANDA_VIBE_W, MUSIC_PANDA_VIBE_H, SSD1306_WHITE);
+  drawDisc(playing);
+  drawMusicButtons(playing);
+
+  // progress: a thin line, filled up to where the song is
+  if (st.hasTrack && st.durationMs > 1) {
+    long shown = st.progressMs + (playing ? (long)(millis() - st.progressStamp) : 0);
+    int w = (int)((int64_t)constrain(shown, 0L, st.durationMs) * SCREEN_WIDTH / st.durationMs);
+    display.drawFastHLine(0, 52, SCREEN_WIDTH, SSD1306_WHITE);
+    display.fillRect(0, 51, w, 3, SSD1306_WHITE);
+  }
+  centered((millis() / HINT_SWAP_MS) % 2 ? "hold: back to menu" : "1:play 2:next 3:prev", 56);
   drawToast(st);
   display.display();
 }
